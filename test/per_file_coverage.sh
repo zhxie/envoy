@@ -30,7 +30,7 @@ declare -a KNOWN_LOW_COVERAGE=(
 "source/extensions/common:96.5"
 "source/extensions/filters/common/expr:96.4"
 "source/extensions/filters/common/fault:94.6"
-"source/extensions/filters/common/rbac:87.5"
+"source/extensions/filters/common/rbac:86.5"
 "source/extensions/filters/http/cache:92.4"
 "source/extensions/filters/http/cache/simple_http_cache:95.2"
 "source/extensions/filters/http/grpc_json_transcoder:95.6"
@@ -74,7 +74,7 @@ COVERAGE_DIR="${SRCDIR}"/generated/coverage
 COVERAGE_DATA="${COVERAGE_DIR}/coverage.dat"
 
 FAILED=0
-DEFAULT_COVERAGE_THRESHOLD=96.6
+DEFAULT_COVERAGE_THRESHOLD=96.0
 DIRECTORY_THRESHOLD=$DEFAULT_COVERAGE_THRESHOLD
 
 # Unfortunately we have a bunch of preexisting directory with low coverage.
