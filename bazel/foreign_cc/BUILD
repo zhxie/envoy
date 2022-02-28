@@ -200,7 +200,12 @@ envoy_cmake(
 
 envoy_cmake(
     name = "dml",
-    cache_entries = {},
+    cache_entries = {
+        "CMAKE_CXX_FLAGS": "-lstdc++",
+    },
+    env = {
+        "CXXFLAGS": "-std=c++14",
+    },
     lib_source = "@com_github_intel_dml//:all",
     out_static_libs = [
         "libdml.a",

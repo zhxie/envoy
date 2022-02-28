@@ -16,9 +16,6 @@ envoy_cc_benchmark_binary(
         "benchmark",
         "dml",
     ],
-    deps = [
-        "//source/common/buffer:buffer_lib",
-    ],
 )
 
 envoy_benchmark_test(
