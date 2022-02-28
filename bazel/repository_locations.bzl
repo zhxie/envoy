@@ -274,6 +274,18 @@ REPOSITORY_LOCATIONS_SPEC = dict(
         release_date = "2021-06-07",
         cpe = "cpe:2.3:a:grpc:grpc:*",
     ),
+    com_github_intel_dml = dict(
+        project_name = "dml",
+        project_desc = "Intel® Data Mover Library",
+        project_url = "https://github.com/intel/dml",
+        version = "0.1.8-beta",
+        sha256 = "475a5f40a3c972dee5fed5069e417519800b2f3990b7bfcfff336af375c258b2",
+        strip_prefix = "DML-{version}",
+        urls = ["https://github.com/intel/dml/archive/v{version}.tar.gz"],
+        use_category = ["dataplane_core", "controlplane"],
+        release_date = "2022-02-23",
+        cpe = "N/A",
+    ),
     com_github_intel_ipp_crypto_crypto_mb = dict(
         project_name = "libipp-crypto",
         project_desc = "Intel® Integrated Performance Primitives Cryptography",

@@ -199,6 +199,17 @@ envoy_cmake(
 )
 
 envoy_cmake(
+    name = "dml",
+    cache_entries = {},
+    lib_source = "@com_github_intel_dml//:all",
+    out_static_libs = [
+        "libdml.a",
+        "libdmlhl.a",
+    ],
+    tags = ["skip_on_windows"],
+)
+
+envoy_cmake(
     name = "event",
     cache_entries = {
         "EVENT__DISABLE_OPENSSL": "on",
