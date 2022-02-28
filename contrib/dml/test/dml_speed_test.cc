@@ -31,7 +31,8 @@ static void BM_DmlSoftware(benchmark::State& state) {
     auto result =
         dml::execute<dml::software>(dml::mem_copy, dml::make_view(data.data(), data.size()),
                                     dml::make_view(buffer.data(), buffer.size()));
-    ASSERT(result.status == dml::status_code::ok, "");
+    RELEASE_ASSERT(result.status == dml::status_code::ok,
+                   fmt::format("DML software mem copy failed with {}", result.status));
     ASSERT(data == buffer, "");
   }
   benchmark::DoNotOptimize(buffer.size());
@@ -48,7 +49,8 @@ static void BM_DmlHardware(benchmark::State& state) {
     auto result =
         dml::execute<dml::hardware>(dml::mem_copy, dml::make_view(data.data(), data.size()),
                                     dml::make_view(buffer.data(), buffer.size()));
-    ASSERT(result.status == dml::status_code::ok, "");
+    RELEASE_ASSERT(result.status == dml::status_code::ok,
+                   fmt::format("DML hardware mem copy failed with {}", result.status));
     ASSERT(data == buffer, "");
   }
   benchmark::DoNotOptimize(buffer.size());
