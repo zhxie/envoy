@@ -202,6 +202,7 @@ envoy_cmake(
     name = "dml",
     cache_entries = {
         "CMAKE_CXX_FLAGS": "-lstdc++",
+        "CMAKE_INSTALL_LIBDIR": "lib",
     },
     env = {
         "CXXFLAGS": "-std=c++14",
