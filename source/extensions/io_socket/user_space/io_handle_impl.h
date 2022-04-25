@@ -20,11 +20,6 @@ namespace Extensions {
 namespace IoSocket {
 namespace UserSpace {
 
-// Align with Buffer::Reservation::MAX_SLICES_
-constexpr uint32_t MAX_FRAGMENT = 8;
-// Align with Buffer::Slice::default_slice_size_
-constexpr uint64_t FRAGMENT_SIZE = 16 * 1024;
-
 /**
  * Network::IoHandle implementation which provides a buffer as data source. It is designed to used
  * by Network::ConnectionImpl. Some known limitations include

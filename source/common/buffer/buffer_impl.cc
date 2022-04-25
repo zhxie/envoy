@@ -350,7 +350,7 @@ void OwnedImpl::move(Instance& rhs, uint64_t length) {
 }
 
 Reservation OwnedImpl::reserveForRead() {
-  return reserveWithMaxLength(default_read_reservation_size_);
+  return reserveWithMaxLength(ThreadSafeSingleton<SliceHelper>::get().readReservationSize());
 }
 
 Reservation OwnedImpl::reserveWithMaxLength(uint64_t max_length) {
@@ -371,7 +371,8 @@ Reservation OwnedImpl::reserveWithMaxLength(uint64_t max_length) {
 
   // Check whether there are any empty slices with reservable space at the end of the buffer.
   uint64_t reservable_size = slices_.empty() ? 0 : slices_.back().reservableSize();
-  if (reservable_size >= max_length || reservable_size >= (Slice::default_slice_size_ / 8)) {
+  uint32_t slice_size = ThreadSafeSingleton<SliceHelper>::get().sliceSize();
+  if (reservable_size >= max_length || reservable_size >= (slice_size / 8)) {
     uint64_t reserve_size = std::min(reservable_size, bytes_remaining);
     RawSlice slice = slices_.back().reserve(reserve_size);
     reservation_slices.push_back(slice);
@@ -381,19 +382,17 @@ Reservation OwnedImpl::reserveWithMaxLength(uint64_t max_length) {
   }
 
   while (bytes_remaining != 0 && reservation_slices.size() < reservation.MAX_SLICES_) {
-    constexpr uint64_t size = Slice::default_slice_size_;
-
     // If the next slice would go over the desired size, and the amount already reserved is already
     // at least one full slice in size, stop allocating slices. This prevents returning a
     // reservation larger than requested, which could go above the watermark limits for a watermark
     // buffer, unless the size would be very small (less than 1 full slice).
-    if (size > bytes_remaining && reserved >= size) {
+    if (slice_size > bytes_remaining && reserved >= slice_size) {
       break;
     }
 
     Slice::SizedStorage storage = slices_owner->newStorage();
-    ASSERT(storage.len_ == size);
-    const RawSlice raw_slice{storage.mem_.get(), size};
+    ASSERT(storage.len_ == slice_size);
+    const RawSlice raw_slice{storage.mem_.get(), slice_size};
     slices_owner->owned_storages_.emplace_back(std::move(storage));
     reservation_slices.push_back(raw_slice);
     bytes_remaining -= std::min<uint64_t>(raw_slice.len_, bytes_remaining);

@@ -436,6 +436,15 @@ void InstanceImpl::initialize(Network::Address::InstanceConstSharedPtr local_add
     ThreadSafeSingleton<Http::PrefixValue>::get().setPrefix(bootstrap_.header_prefix().c_str());
   }
 
+  // Immediate after the bootstrap has been loaded, override default slice size and default max
+  // slices.
+  if (bootstrap_.default_slice_size()) {
+    ThreadSafeSingleton<Buffer::SliceHelper>::get().setSliceSize(bootstrap_.default_slice_size());
+  }
+  if (bootstrap_.default_max_slices()) {
+    ThreadSafeSingleton<Buffer::SliceHelper>::get().setMaxSlices(bootstrap_.default_max_slices());
+  }
+
   // Register Custom O(1) headers from bootstrap.
   registerCustomInlineHeadersFromBootstrap(bootstrap_);
 

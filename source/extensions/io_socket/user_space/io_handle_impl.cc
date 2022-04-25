@@ -32,14 +32,15 @@ Api::SysCallIntResult makeInvalidSyscallResult() {
 uint64_t moveUpTo(Buffer::Instance& dst, Buffer::Instance& src, uint64_t max_length) {
   ASSERT(src.length() > 0);
   if (dst.highWatermark() != 0) {
+    uint32_t fragment_size = ThreadSafeSingleton<Buffer::SliceHelper>::get().sliceSize();
     if (dst.length() < dst.highWatermark()) {
       // Move until high watermark so that high watermark is not triggered.
       // However, if dst buffer is near high watermark, move 16K to avoid the small fragment move.
       max_length = std::min(max_length,
-                            std::max<uint64_t>(FRAGMENT_SIZE, dst.highWatermark() - dst.length()));
+                            std::max<uint64_t>(fragment_size, dst.highWatermark() - dst.length()));
     } else {
       // Move at most 16K if the dst buffer is over high watermark.
-      max_length = std::min<uint64_t>(max_length, FRAGMENT_SIZE);
+      max_length = std::min<uint64_t>(max_length, fragment_size);
     }
   }
   uint64_t res = std::min(max_length, src.length());
@@ -123,7 +124,8 @@ Api::IoCallUint64Result IoHandleImpl::readv(uint64_t max_length, Buffer::RawSlic
 Api::IoCallUint64Result IoHandleImpl::read(Buffer::Instance& buffer,
                                            absl::optional<uint64_t> max_length_opt) {
   // Below value comes from Buffer::OwnedImpl::default_read_reservation_size_.
-  uint64_t max_length = max_length_opt.value_or(MAX_FRAGMENT * FRAGMENT_SIZE);
+  uint64_t max_length = max_length_opt.value_or(
+      ThreadSafeSingleton<Buffer::SliceHelper>::get().readReservationSize());
   if (max_length == 0) {
     return Api::ioCallUint64ResultNoError();
   }
@@ -219,7 +221,7 @@ Api::IoCallUint64Result IoHandleImpl::write(Buffer::Instance& buffer) {
   const uint64_t total_bytes_to_write =
       moveUpTo(*peer_handle_->getWriteBuffer(), buffer,
                // Below value comes from Buffer::OwnedImpl::default_read_reservation_size_.
-               MAX_FRAGMENT * FRAGMENT_SIZE);
+               ThreadSafeSingleton<Buffer::SliceHelper>::get().readReservationSize());
   peer_handle_->setNewDataAvailable();
   ENVOY_LOG(trace, "socket {} write {} bytes of {}", static_cast<void*>(this), total_bytes_to_write,
             max_bytes_to_write);

@@ -11,11 +11,37 @@
 
 #include "source/common/common/assert.h"
 #include "source/common/common/non_copyable.h"
+#include "source/common/common/thread.h"
 #include "source/common/common/utility.h"
 #include "source/common/event/libevent.h"
+#include "source/common/singleton/threadsafe_singleton.h"
 
 namespace Envoy {
 namespace Buffer {
+
+// Helper class for storing default slice options.
+class SliceHelper {
+public:
+  constexpr uint32_t maxSlices() const { return max_slices_; }
+  constexpr uint32_t sliceSize() const { return slice_size_; }
+  constexpr uint64_t readReservationSize() const { return max_slices_ * slice_size_; }
+
+  void setMaxSlices(uint32_t max_slices) {
+    ASSERT_IS_MAIN_OR_TEST_THREAD();
+    max_slices_ = max_slices;
+  }
+  void setSliceSize(uint32_t slice_size) {
+    ASSERT_IS_MAIN_OR_TEST_THREAD();
+    slice_size_ = slice_size;
+  }
+
+private:
+  static constexpr uint32_t DEFAULT_MAX_SLICES = 8;
+  static constexpr uint32_t DEFAULT_SLICE_SIZE = 16384;
+
+  uint32_t max_slices_ = DEFAULT_MAX_SLICES;
+  uint32_t slice_size_ = DEFAULT_SLICE_SIZE;
+};
 
 /**
  * A Slice manages a contiguous block of bytes.
@@ -345,8 +371,6 @@ public:
     account->charge(capacity_);
     account_ = account;
   }
-
-  static constexpr uint32_t default_slice_size_ = 16384;
 
 public:
   /**
@@ -720,9 +744,6 @@ public:
   size_t addFragments(absl::Span<const absl::string_view> fragments) override;
 
 protected:
-  static constexpr uint64_t default_read_reservation_size_ =
-      Reservation::MAX_SLICES_ * Slice::default_slice_size_;
-
   /**
    * Create a reservation with a maximum length.
    */
@@ -769,7 +790,7 @@ private:
     ~OwnedImplReservationSlicesOwnerMultiple() override {
       for (auto r = owned_storages_.rbegin(); r != owned_storages_.rend(); r++) {
         if (r->mem_ != nullptr) {
-          ASSERT(r->len_ == Slice::default_slice_size_);
+          ASSERT(r->len_ == ThreadSafeSingleton<SliceHelper>::get().sliceSize());
           if (free_list_ref_.size() < free_list_max_) {
             free_list_ref_.push_back(std::move(r->mem_));
           }
@@ -778,14 +799,15 @@ private:
     }
 
     Slice::SizedStorage newStorage() {
-      ASSERT(Slice::sliceSize(Slice::default_slice_size_) == Slice::default_slice_size_);
+      uint32_t slice_size = ThreadSafeSingleton<SliceHelper>::get().sliceSize();
+      ASSERT(Slice::sliceSize(slice_size) == slice_size);
 
-      Slice::SizedStorage storage{nullptr, Slice::default_slice_size_};
+      Slice::SizedStorage storage{nullptr, slice_size};
       if (!free_list_ref_.empty()) {
         storage.mem_ = std::move(free_list_ref_.back());
         free_list_ref_.pop_back();
       } else {
-        storage.mem_.reset(new uint8_t[Slice::default_slice_size_]);
+        storage.mem_.reset(new uint8_t[slice_size]);
       }
 
       return storage;

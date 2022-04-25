@@ -28,8 +28,10 @@ envoy_cc_library(
     deps = [
         "//envoy/buffer:buffer_interface",
         "//source/common/common:non_copyable",
+        "//source/common/common:thread_lib",
         "//source/common/common:utility_lib",
         "//source/common/event:libevent_lib",
+        "//source/common/singleton:threadsafe_singleton",
     ],
 )
 
