@@ -109,7 +109,7 @@ void OwnedImpl::copyOut(size_t start, uint64_t size, void* data) const {
       continue;
     }
     uint64_t copy_size = std::min(size, data_size - bytes_to_skip);
-    memcpy(dest, slice.data() + bytes_to_skip, copy_size); // NOLINT(safe-memcpy)
+    MemoryInterfaceSingleton::get().memoryCopy(dest, slice.data() + bytes_to_skip, copy_size);
     size -= copy_size;
     dest += copy_size;
     // Now that we've started copying, there are no bytes left to skip over. If there
@@ -138,8 +138,9 @@ uint64_t OwnedImpl::copyOutToSlices(uint64_t size, Buffer::RawSlice* dest_slices
     // the dest slice available size.
     uint64_t length_to_copy =
         std::min(left_data_size_in_src_slice, std::min(left_data_size_in_dst_slice, left_to_read));
-    memcpy(static_cast<uint8_t*>(dest_slice.mem_) + dest_slice_offset, // NOLINT(safe-memcpy)
-           src_slice.data() + src_slice_offset, length_to_copy);
+    MemoryInterfaceSingleton::get().memoryCopy(static_cast<uint8_t*>(dest_slice.mem_) +
+                                                   dest_slice_offset,
+                                               src_slice.data() + src_slice_offset, length_to_copy);
     src_slice_offset = src_slice_offset + length_to_copy;
     dest_slice_offset = dest_slice_offset + length_to_copy;
     if (src_slice_offset == src_slice.dataSize()) {
@@ -645,7 +646,7 @@ size_t OwnedImpl::addFragments(absl::Span<const absl::string_view> fragments) {
     // Enough continuous memory for all fragments in the back slice then copy
     // all fragments directly for performance improvement.
     for (const auto& fragment : fragments) {
-      memcpy(mem, fragment.data(), fragment.size()); // NOLINT(safe-memcpy)
+      MemoryInterfaceSingleton::get().memoryCopy(mem, fragment.data(), fragment.size());
       mem += fragment.size();
     }
     back.commit<false>(reservation);

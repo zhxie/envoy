@@ -42,6 +42,7 @@ envoy_cc_library(
         "//envoy/server:tracer_config_interface",
         "//envoy/ssl:context_manager_interface",
         "//source/common/access_log:access_log_lib",
+        "//source/common/buffer:default_memory_interface_lib",
         "//source/common/common:assert_lib",
         "//source/common/common:minimal_logger_lib",
         "//source/common/common:utility_lib",

@@ -22,3 +22,8 @@ envoy_cc_library(
         "//source/common/common:utility_lib",
     ],
 )
+
+envoy_cc_library(
+    name = "memory_interface",
+    hdrs = ["memory_interface.h"],
+)

@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package envoy.extensions.buffer.memory_interface.v3;
+
+import "udpa/annotations/status.proto";
+
+option java_package = "io.envoyproxy.envoy.extensions.buffer.memory_interface.v3";
+option java_outer_classname = "DefaultMemoryInterfaceProto";
+option java_multiple_files = true;
+option go_package = "github.com/envoyproxy/go-control-plane/envoy/extensions/buffer/memory_interface/v3;memory_interfacev3";
+option (udpa.annotations.file_status).package_version_status = ACTIVE;
+
+// [#protodoc-title: Default Memory Interface configuration]
+
+// Configuration for default memory interface that relies on OS dependent syscall to operate
+// memory.
+message DefaultMemoryInterface {
+}

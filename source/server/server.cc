@@ -584,6 +584,15 @@ void InstanceImpl::initialize(Network::Address::InstanceConstSharedPtr local_add
         std::move(safe_actions), std::move(unsafe_actions), api_->threadFactory());
   }
 
+  if (!bootstrap_.default_memory_interface().empty()) {
+    auto& memory_name = bootstrap_.default_memory_interface();
+    auto memory = const_cast<Buffer::MemoryInterface*>(Buffer::memoryInterface(memory_name));
+    if (memory != nullptr) {
+      Buffer::MemoryInterfaceSingleton::clear();
+      Buffer::MemoryInterfaceSingleton::initialize(memory);
+    }
+  }
+
   if (!bootstrap_.default_socket_interface().empty()) {
     auto& sock_name = bootstrap_.default_socket_interface();
     auto sock = const_cast<Network::SocketInterface*>(Network::socketInterface(sock_name));

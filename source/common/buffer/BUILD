@@ -26,6 +26,7 @@ envoy_cc_library(
     srcs = ["buffer_impl.cc"],
     hdrs = ["buffer_impl.h"],
     deps = [
+        ":memory_interface_lib",
         "//envoy/buffer:buffer_interface",
         "//source/common/common:non_copyable",
         "//source/common/common:thread_lib",
@@ -42,5 +43,25 @@ envoy_cc_library(
     deps = [
         ":buffer_lib",
         "//source/common/protobuf",
+    ],
+)
+
+envoy_cc_library(
+    name = "memory_interface_lib",
+    hdrs = ["memory_interface.h"],
+    deps = [
+        "//envoy/buffer:memory_interface",
+        "//envoy/registry",
+        "//envoy/server:bootstrap_extension_config_interface",
+    ],
+)
+
+envoy_cc_library(
+    name = "default_memory_interface_lib",
+    srcs = ["memory_interface_impl.cc"],
+    hdrs = ["memory_interface_impl.h"],
+    deps = [
+        ":memory_interface_lib",
+        "@envoy_api//envoy/extensions/buffer/memory_interface/v3:pkg_cc_proto",
     ],
 )

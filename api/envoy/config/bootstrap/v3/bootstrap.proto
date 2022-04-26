@@ -41,7 +41,7 @@ option (udpa.annotations.file_status).package_version_status = ACTIVE;
 // <config_overview_bootstrap>` for more detail.
 
 // Bootstrap :ref:`configuration overview <config_overview_bootstrap>`.
-// [#next-free-field: 36]
+// [#next-free-field: 37]
 message Bootstrap {
   option (udpa.annotations.versioning).previous_message_type =
       "envoy.config.bootstrap.v2.Bootstrap";
@@ -338,6 +338,10 @@ message Bootstrap {
   // Optional overrideing of default max slice. An owned buffer will reserve `default_max_slices *
   // default_slice_size` at max. Defaults to 8.
   uint32 default_max_slices = 35;
+
+  // Optional overriding of default memory interface. The value must be the name of one of the
+  // memory interface factories initialized through a bootstrap extension.
+  string default_memory_interface = 36;
 }
 
 // Administration interface :ref:`operations documentation

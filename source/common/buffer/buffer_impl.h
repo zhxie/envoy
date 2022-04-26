@@ -9,6 +9,7 @@
 #include "envoy/buffer/buffer.h"
 #include "envoy/http/stream_reset_handler.h"
 
+#include "source/common/buffer/memory_interface.h"
 #include "source/common/common/assert.h"
 #include "source/common/common/non_copyable.h"
 #include "source/common/common/thread.h"
@@ -279,7 +280,7 @@ public:
     uint8_t* dest = base_ + reservable_;
     reservable_ += copy_size;
     // NOLINTNEXTLINE(clang-analyzer-core.NullDereference)
-    memcpy(dest, data, copy_size); // NOLINT(safe-memcpy)
+    MemoryInterfaceSingleton::get().memoryCopy(dest, data, copy_size);
     return copy_size;
   }
 
@@ -309,7 +310,7 @@ public:
       copy_size = std::min(size, data_);
       data_ -= copy_size;
     }
-    memcpy(base_ + data_, src + size - copy_size, copy_size); // NOLINT(safe-memcpy)
+    MemoryInterfaceSingleton::get().memoryCopy(base_ + data_, src + size - copy_size, copy_size);
     return copy_size;
   }
 
@@ -870,7 +871,7 @@ private:
   OwnedBufferFragmentImpl(absl::string_view data, const Releasor& releasor)
       : releasor_(releasor), size_(data.size()) {
     ASSERT(releasor != nullptr);
-    memcpy(data_, data.data(), data.size()); // NOLINT(safe-memcpy)
+    MemoryInterfaceSingleton::get().memoryCopy(data_, data.data(), data.size());
   }
 
   const Releasor releasor_;
