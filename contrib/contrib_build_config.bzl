@@ -42,4 +42,10 @@ CONTRIB_EXTENSIONS = {
     #
 
     "envoy.matching.input_matchers.hyperscan":                  "//contrib/hyperscan/matching/input_matchers/source:config",
+
+    #
+    # Memory interface extensions
+    #
+
+    "envoy.bootstrap.dml":                                      "//contrib/dml/source:config",
 }

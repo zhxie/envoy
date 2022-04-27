@@ -1,0 +1,19 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index c80043a..f2fc1c9 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -79,11 +79,11 @@ add_subdirectory(sources)
+ set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+ set(BUILD_GMOCK OFF CACHE BOOL "Suppress gmock build" FORCE)
+ set(INSTALL_GTEST OFF CACHE BOOL "Suppress gtest installation" FORCE)
+-add_subdirectory(google-test)
++# add_subdirectory(google-test)
+ 
+ # Testing
+-add_subdirectory(tests)
+-add_subdirectory(examples)
++# add_subdirectory(tests)
++# add_subdirectory(examples)
+ 
+ # Install rules
+ install(EXPORT ${PROJECT_NAME}Targets

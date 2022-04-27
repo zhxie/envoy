@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package envoy.extensions.dml.v3alpha;
+
+import "udpa/annotations/status.proto";
+import "validate/validate.proto";
+
+option java_package = "io.envoyproxy.envoy.extensions.dml.v3alpha";
+option java_outer_classname = "DmlMemoryInterfaceProto";
+option java_multiple_files = true;
+option go_package = "github.com/envoyproxy/go-control-plane/envoy/extensions/dml/v3alpha";
+option (udpa.annotations.file_status).work_in_progress = true;
+option (udpa.annotations.file_status).package_version_status = ACTIVE;
+
+// [#protodoc-title: DML Memory Interface configuration]
+// [#extension: envoy.bootstrap.dml]
+
+// Configuration for DML memory interface.
+message DmlMemoryInterface {
+  // Software cutoff size to fallback to default memory copy. Memory copied with size greater than
+  // or equal to software cutoff will be optimized with DML. If the value is unset, DML-optimized
+  // memory copy will always take effect.
+  uint32 software_cutoff = 1;
+
+  // Hardware cutoff size to fallback to DML-optimized memory copy. Memory copied with size greater
+  // than or equal to hardware cutoff will be handled by DSA. If the value is unset, DSA will
+  // always be used.
+  uint32 hardware_cutoff = 2;
+}

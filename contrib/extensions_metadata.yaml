@@ -63,3 +63,8 @@ envoy.filters.http.language:
   - envoy.filters.http
   security_posture: requires_trusted_downstream_and_upstream
   status: alpha
+envoy.bootstrap.dml:
+  categories:
+  - envoy.bootstrap
+  security_posture: requires_trusted_downstream_and_upstream
+  status: alpha
