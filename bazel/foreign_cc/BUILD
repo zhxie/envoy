@@ -74,6 +74,16 @@ cc_library(
 )
 
 configure_make(
+    name = "libuuid",
+    configure_options = [
+        "--enable-shared=no",
+    ],
+    lib_source = "@net_sourceforge_libuuid//:all",
+    out_static_libs = ["libuuid.a"],
+    tags = ["skip_on_windows"],
+)
+
+configure_make(
     name = "luajit",
     configure_command = "build.py",
     env = select({

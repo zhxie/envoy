@@ -6,6 +6,10 @@ load(
     "envoy_contrib_package",
 )
 load(
+    "//bazel:envoy_internal.bzl",
+    "envoy_external_dep_path",
+)
+load(
     "//contrib:all_contrib_extensions.bzl",
     "envoy_contrib_linux_x86_64_constraints",
 )
@@ -17,7 +21,8 @@ envoy_contrib_package()
 envoy_cmake(
     name = "dml",
     cache_entries = {
-        "CMAKE_CXX_FLAGS": "-Dlinux",
+        "CMAKE_C_FLAGS": "-I$EXT_BUILD_DEPS/libuuid/include",
+        "CMAKE_CXX_FLAGS": "-Dlinux -I$EXT_BUILD_DEPS/libuuid/include",
         "CMAKE_INSTALL_LIBDIR": "lib",
     },
     lib_source = "@com_github_intel_dml//:all",
@@ -27,6 +32,9 @@ envoy_cmake(
     ],
     tags = ["skip_on_windows"],
     target_compatible_with = envoy_contrib_linux_x86_64_constraints(),
+    deps = [
+        envoy_external_dep_path("libuuid"),
+    ],
 )
 
 selects.config_setting_group(

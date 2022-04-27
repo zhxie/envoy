@@ -494,6 +494,19 @@ REPOSITORY_LOCATIONS_SPEC = dict(
         release_date = "2017-03-24",
         cpe = "N/A",
     ),
+    net_sourceforge_libuuid = dict(
+        project_name = "libuuid",
+        project_desc = "Portable uuid C library",
+        project_url = "https://sourceforge.net/projects/libuuid",
+        version = "1.0.3",
+        sha256 = "46af3275291091009ad7f1b899de3d0cea0252737550e7919d17237997db5644",
+        strip_prefix = "libuuid-{version}",
+        urls = ["https://downloads.sourceforge.net/project/libuuid/libuuid-{version}.tar.gz"],
+        release_date = "2014-08-12",
+        use_category = ["other"],
+        extensions = ["envoy.bootstrap.dml"],
+        cpe = "N/A",
+    ),
     # This should be removed, see https://github.com/envoyproxy/envoy/issues/13261.
     net_zlib = dict(
         project_name = "zlib",
