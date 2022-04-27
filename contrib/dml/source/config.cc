@@ -1,11 +1,5 @@
 #include "contrib/dml/source/config.h"
 
-#include <dml/hl/data_view.hpp>
-#include <dml/hl/execute.hpp>
-#include <dml/hl/execution_path.hpp>
-#include <dml/hl/operations.hpp>
-#include <dml/hl/status_code.hpp>
-
 #include "contrib/envoy/extensions/dml/v3alpha/dml_memory_interface.pb.h"
 #include "contrib/envoy/extensions/dml/v3alpha/dml_memory_interface.pb.validate.h"
 
@@ -19,6 +13,10 @@ namespace Buffer {
 namespace Dml {
 
 void DmlMemoryInterface::memoryCopy(void* dest, const void* src, size_t n) const {
+  if (!n) {
+    return;
+  }
+
 #ifndef DML_DISABLED
   dml::const_data_view src_view = dml::make_view(src, n);
   dml::data_view dest_view = dml::make_view(dest, n);

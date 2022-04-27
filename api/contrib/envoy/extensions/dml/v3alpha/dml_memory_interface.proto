@@ -18,12 +18,14 @@ option (udpa.annotations.file_status).package_version_status = ACTIVE;
 // Configuration for DML memory interface.
 message DmlMemoryInterface {
   // Software cutoff size to fallback to default memory copy. Memory copied with size greater than
-  // or equal to software cutoff will be optimized with DML. If the value is unset, DML-optimized
-  // memory copy will always take effect.
+  // or equal to software cutoff will be optimized with DML.
+  // If the value is unset, DML-optimized memory copy will always take effect.
   uint32 software_cutoff = 1;
 
   // Hardware cutoff size to fallback to DML-optimized memory copy. Memory copied with size greater
-  // than or equal to hardware cutoff will be handled by DSA. If the value is unset, DSA will
-  // always be used.
+  // than or equal to hardware cutoff will be handled by DSA.
+  // If the value is unset, DSA will always be used.
+  // If the value is smaller than software cutoff, unmet memory copied will fallback to default
+  // memory copy.
   uint32 hardware_cutoff = 2;
 }
