@@ -4,7 +4,7 @@
 #include "contrib/envoy/extensions/dml/v3alpha/dml_memory_interface.pb.validate.h"
 
 #ifndef DML_DISABLED
-#include <dml/dml.hpp>
+#include "dml/dml.hpp"
 #endif
 
 namespace Envoy {

@@ -27,7 +27,6 @@ envoy_cmake(
     ],
     tags = ["skip_on_windows"],
     target_compatible_with = envoy_contrib_linux_x86_64_constraints(),
-    visibility = ["//visibility:private"],
 )
 
 selects.config_setting_group(
