@@ -7,14 +7,17 @@ namespace Extensions {
 namespace Buffer {
 namespace Dml {
 
-class DmlMemoryInterfaceExtension : public Envoy::Buffer::MemoryInterfaceExtension {
+class MemoryInterfaceExtension : public Envoy::Buffer::MemoryInterfaceExtension {
 public:
-  DmlMemoryInterfaceExtension(Envoy::Buffer::MemoryInterface& memory_interface)
+  MemoryInterfaceExtension(Envoy::Buffer::MemoryInterface& memory_interface)
       : Envoy::Buffer::MemoryInterfaceExtension(memory_interface) {}
 };
 
-class DmlMemoryInterface : public Envoy::Buffer::MemoryInterfaceBase {
+class MemoryInterface : public Envoy::Buffer::MemoryInterfaceBase {
 public:
+  MemoryInterface();
+  MemoryInterface(uint32_t software_cutoff, uint32_t hardware_cutoff);
+
   // Buffer::MemoryInterface
   void memoryCopy(void* dest, const void* src, size_t n) const override;
 
@@ -30,7 +33,7 @@ private:
   uint32_t hardware_cutoff_;
 };
 
-DECLARE_FACTORY(DmlMemoryInterface);
+DECLARE_FACTORY(MemoryInterface);
 
 } // namespace Dml
 } // namespace Buffer
