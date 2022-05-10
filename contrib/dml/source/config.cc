@@ -54,6 +54,65 @@ void MemoryInterface::memoryCopy(void* dest, const void* src, size_t n) const {
   memcpy(dest, src, n);
 }
 
+void MemoryInterface::batchMemoryCopy(const std::vector<void*>& dests,
+                                      const std::vector<const void*>& srcs,
+                                      const std::vector<size_t>& ns) const {
+  ASSERT(dests.size() == srcs.size());
+  ASSERT(srcs.size() == ns.size());
+
+  const size_t size = srcs.size();
+#ifndef DML_DISABLED
+  using Handler = dml::handler<dml::mem_copy_operation, std::allocator<unsigned char>>;
+
+  std::vector<Handler> hardware_handlers;
+  hardware_handlers.reserve(size);
+  std::vector<size_t> hardware_ops;
+  hardware_ops.reserve(size);
+  std::vector<size_t> software_ops;
+  software_ops.reserve(size);
+
+  // Submit DSA-met memory copy.
+  for (size_t i = 0; i < size; i++) {
+    const size_t n = ns[i];
+    if (!n) {
+      continue;
+    }
+
+    if (n >= hardware_cutoff_) {
+      dml::const_data_view src_view = dml::make_view(srcs[i], n);
+      dml::data_view dest_view = dml::make_view(dests[i], n);
+      hardware_handlers.push_back(dml::submit<dml::hardware>(dml::mem_copy, src_view, dest_view));
+      hardware_ops.push_back(i);
+    } else {
+      software_ops.push_back(i);
+    }
+  }
+
+  // While DSA is copying memory, perform DSA-unmet memory copy in CPU.
+  for (const size_t i : software_ops) {
+    memoryCopy(dests[i], srcs[i], ns[i]);
+  }
+  software_ops.clear();
+
+  // Check and fall failed to software path.
+  const size_t hardware_ops_size = hardware_ops.size();
+  for (size_t i = 0; i < hardware_ops_size; i++) {
+    const dml::status_code code = hardware_handlers[i].get().status;
+    if (code != dml::status_code::ok) {
+      ENVOY_LOG_MISC(warn, "DSA failed to copy memory with errno {}.", static_cast<uint32_t>(code));
+      software_ops.push_back(i);
+    }
+  }
+  for (const size_t i : software_ops) {
+    memoryCopy(dests[i], srcs[i], ns[i]);
+  }
+#else
+  for (size_t i = 0; i < size; i++) {
+    memoryCopy(dests[i], srcs[i], ns[i]);
+  }
+#endif
+}
+
 Server::BootstrapExtensionPtr
 MemoryInterface::createBootstrapExtension(const Protobuf::Message& config,
                                           Server::Configuration::ServerFactoryContext& context) {

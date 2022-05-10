@@ -11,6 +11,16 @@ void MemoryInterfaceImpl::memoryCopy(void* dest, const void* src, size_t n) cons
   memcpy(dest, src, n);
 }
 
+void MemoryInterfaceImpl::batchMemoryCopy(const std::vector<void*>& dests,
+                                          const std::vector<const void*>& srcs,
+                                          const std::vector<size_t>& ns) const {
+  ASSERT(dests.size() == srcs.size());
+  ASSERT(srcs.size() == ns.size());
+  for (size_t i = 0; i < srcs.size(); i++) {
+    memoryCopy(dests[i], srcs[i], ns[i]);
+  }
+}
+
 Server::BootstrapExtensionPtr
 MemoryInterfaceImpl::createBootstrapExtension(const Protobuf::Message&,
                                               Server::Configuration::ServerFactoryContext&) {

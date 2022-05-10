@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <vector>
 
 #include "envoy/common/pure.h"
 
@@ -21,6 +22,16 @@ public:
    * @param n number of bytes to copy
    */
   virtual void memoryCopy(void* dest, const void* src, size_t n) const PURE;
+
+  /**
+   * Copies bytes from source to destination in a batch.
+   * @param dests vector of pointers to the memory location to copy to
+   * @param src vector of pointers to the memory location to copy from
+   * @param n vector of numbers of bytes to copy
+   */
+  virtual void batchMemoryCopy(const std::vector<void*>& dests,
+                               const std::vector<const void*>& srcs,
+                               const std::vector<size_t>& ns) const PURE;
 };
 
 } // namespace Buffer

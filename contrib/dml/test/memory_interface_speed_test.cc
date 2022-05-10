@@ -24,7 +24,47 @@ BENCHMARK_DEFINE_F(Bandwidth, Dml)(::benchmark::State& state) {
   }
 }
 
+BENCHMARK_DEFINE_F(Bandwidth, DefaultBatch)(::benchmark::State& state) {
+  initialize(state);
+  Buffer::MemoryInterfaceImpl memory_interface;
+  std::vector<const void*> srcs;
+  std::vector<void*> dests;
+  std::vector<size_t> ns;
+  for (const auto& src : srcs_) {
+    srcs.push_back(src.data());
+    ns.push_back(src.size());
+  }
+  for (auto& dest : dests_) {
+    dests.push_back(dest.data());
+  }
+  for (auto _ : state) { // NOLINT
+    memory_interface.batchMemoryCopy(dests, srcs, ns);
+  }
+}
+
+BENCHMARK_DEFINE_F(Bandwidth, DmlBatch)(::benchmark::State& state) {
+  initialize(state);
+  Extensions::Buffer::Dml::MemoryInterface memory_interface;
+  std::vector<const void*> srcs;
+  std::vector<void*> dests;
+  std::vector<size_t> ns;
+  for (const auto& src : srcs_) {
+    srcs.push_back(src.data());
+    ns.push_back(src.size());
+  }
+  for (auto& dest : dests_) {
+    dests.push_back(dest.data());
+  }
+  for (auto _ : state) { // NOLINT
+    memory_interface.batchMemoryCopy(dests, srcs, ns);
+  }
+}
+
 BENCHMARK_REGISTER_F(Bandwidth, Default)->ArgsProduct({{256, 2048, 16384, 131072, 1048576}, {1}});
 BENCHMARK_REGISTER_F(Bandwidth, Dml)->ArgsProduct({{256, 2048, 16384, 131072, 1048576}, {1}});
+BENCHMARK_REGISTER_F(Bandwidth, DefaultBatch)
+    ->ArgsProduct({{256, 2048, 16384, 131072, 1048576}, {4, 16, 128}});
+BENCHMARK_REGISTER_F(Bandwidth, DmlBatch)
+    ->ArgsProduct({{256, 2048, 16384, 131072, 1048576}, {4, 16, 128}});
 
 } // namespace Envoy

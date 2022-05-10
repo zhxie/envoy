@@ -9,6 +9,8 @@ class MemoryInterfaceImpl : public MemoryInterfaceBase {
 public:
   // MemoryInterface
   void memoryCopy(void* dest, const void* src, size_t n) const override;
+  void batchMemoryCopy(const std::vector<void*>& dests, const std::vector<const void*>& srcs,
+                       const std::vector<size_t>& ns) const override;
 
   // Server::Configuration::BootstrapExtensionFactory
   Server::BootstrapExtensionPtr
