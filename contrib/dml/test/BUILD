@@ -24,3 +24,13 @@ envoy_cc_benchmark_binary(
         "//source/common/common:assert_lib",
     ],
 )
+
+envoy_cc_benchmark_binary(
+    name = "memory_interface_speed_test",
+    srcs = ["memory_interface_speed_test.cc"],
+    deps = [
+        ":bandwidth_lib",
+        "//contrib/dml/source:config",
+        "//source/common/buffer:default_memory_interface_lib",
+    ],
+)
