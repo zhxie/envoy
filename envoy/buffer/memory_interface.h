@@ -21,7 +21,7 @@ public:
    * @param src pointer to the memory location to copy from
    * @param n number of bytes to copy
    */
-  virtual void memoryCopy(void* dest, const void* src, size_t n) const PURE;
+  virtual void memoryCopy(void* dest, const void* src, size_t n) PURE;
 
   /**
    * Copies bytes from source to destination in a batch.
@@ -31,7 +31,7 @@ public:
    */
   virtual void batchMemoryCopy(const std::vector<void*>& dests,
                                const std::vector<const void*>& srcs,
-                               const std::vector<size_t>& ns) const PURE;
+                               const std::vector<size_t>& ns) PURE;
 };
 
 } // namespace Buffer

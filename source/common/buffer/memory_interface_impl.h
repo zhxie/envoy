@@ -8,9 +8,9 @@ namespace Buffer {
 class MemoryInterfaceImpl : public MemoryInterfaceBase {
 public:
   // MemoryInterface
-  void memoryCopy(void* dest, const void* src, size_t n) const override;
+  void memoryCopy(void* dest, const void* src, size_t n) override;
   void batchMemoryCopy(const std::vector<void*>& dests, const std::vector<const void*>& srcs,
-                       const std::vector<size_t>& ns) const override;
+                       const std::vector<size_t>& ns) override;
 
   // Server::Configuration::BootstrapExtensionFactory
   Server::BootstrapExtensionPtr

@@ -17,7 +17,7 @@ MemoryInterface::MemoryInterface() : MemoryInterface(0, 0) {}
 MemoryInterface::MemoryInterface(uint32_t software_cutoff, uint32_t hardware_cutoff)
     : software_cutoff_(software_cutoff), hardware_cutoff_(hardware_cutoff) {}
 
-void MemoryInterface::memoryCopy(void* dest, const void* src, size_t n) const {
+void MemoryInterface::memoryCopy(void* dest, const void* src, size_t n) {
 #ifndef DML_DISABLED
   if (!n) {
     return;
@@ -56,7 +56,7 @@ void MemoryInterface::memoryCopy(void* dest, const void* src, size_t n) const {
 
 void MemoryInterface::batchMemoryCopy(const std::vector<void*>& dests,
                                       const std::vector<const void*>& srcs,
-                                      const std::vector<size_t>& ns) const {
+                                      const std::vector<size_t>& ns) {
   ASSERT(dests.size() == srcs.size());
   ASSERT(srcs.size() == ns.size());
 

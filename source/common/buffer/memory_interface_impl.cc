@@ -7,13 +7,13 @@
 namespace Envoy {
 namespace Buffer {
 
-void MemoryInterfaceImpl::memoryCopy(void* dest, const void* src, size_t n) const {
+void MemoryInterfaceImpl::memoryCopy(void* dest, const void* src, size_t n) {
   memcpy(dest, src, n);
 }
 
 void MemoryInterfaceImpl::batchMemoryCopy(const std::vector<void*>& dests,
                                           const std::vector<const void*>& srcs,
-                                          const std::vector<size_t>& ns) const {
+                                          const std::vector<size_t>& ns) {
   ASSERT(dests.size() == srcs.size());
   ASSERT(srcs.size() == ns.size());
   for (size_t i = 0; i < srcs.size(); i++) {
