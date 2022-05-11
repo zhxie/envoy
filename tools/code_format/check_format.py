@@ -97,8 +97,9 @@ GRPC_INIT_ALLOWLIST = ("./source/common/grpc/google_grpc_context.cc")
 
 # Files that should not raise an error for using memcpy
 MEMCPY_WHITELIST = (
-    "./contrib/dml/source/config.cc", "./source/common/common/mem_block_builder.h",
-    "./source/common/common/safe_memcpy.h", "./source/common/buffer/memory_interface_impl.cc")
+    "./contrib/dml/source/config.cc", "./contrib/idxd/source/config.cc",
+    "./source/common/common/mem_block_builder.h", "./source/common/common/safe_memcpy.h",
+    "./source/common/buffer/memory_interface_impl.cc")
 
 # These files should not throw exceptions. Add HTTP/1 when exceptions removed.
 EXCEPTION_DENYLIST = (

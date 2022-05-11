@@ -1,0 +1,13 @@
+diff --git a/accfg/lib/Makefile.am b/accfg/lib/Makefile.am
+index f34a2d8..3c707d5 100644
+--- a/accfg/lib/Makefile.am
++++ b/accfg/lib/Makefile.am
+@@ -3,7 +3,7 @@ include $(top_srcdir)/Makefile.am.in
+ %.pc: %.pc.in Makefile
+ 	$(SED_PROCESS)
+
+-pkginclude_HEADERS = ../libaccel_config.h
++pkginclude_HEADERS = ../idxd.h ../libaccel_config.h
+ lib_LTLIBRARIES = libaccel-config.la
+
+ DISTCLEANFILES = config.h

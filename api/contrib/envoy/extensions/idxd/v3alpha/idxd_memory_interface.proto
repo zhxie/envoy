@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package envoy.extensions.idxd.v3alpha;
+
+import "udpa/annotations/status.proto";
+import "validate/validate.proto";
+
+option java_package = "io.envoyproxy.envoy.extensions.idxd.v3alpha";
+option java_outer_classname = "IdxdMemoryInterfaceProto";
+option java_multiple_files = true;
+option go_package = "github.com/envoyproxy/go-control-plane/envoy/extensions/idxd/v3alpha";
+option (udpa.annotations.file_status).work_in_progress = true;
+option (udpa.annotations.file_status).package_version_status = ACTIVE;
+
+// [#protodoc-title: IDXD Memory Interface configuration]
+// [#extension: envoy.bootstrap.idxd]
+
+// Configuration for IDXD memory interface.
+message IdxdMemoryInterface {
+  // Work queue where memory copy should be offloaded.
+  // Both shared work queue (SWQ) and dedicated work queue (DWQ) can be offloaded to. To use
+  // dedicated work queue, please ensure Envoy is running in a single thread.
+  oneof work_queue {
+    // Device of work queue.
+    // For example, the first work queue of the first device (dsa0) is ``wq0.0``.
+    string device = 1;
+
+    // Name of work queue. If work queues have a same name, the first work queue with the specified
+    // name will be chosen.
+    string name = 2;
+  }
+
+  // Cutoff size to fallback to default memory copy. Memory copied with size greater than or equal
+  // to hardware cutoff will be handled by DSA.
+  // If the value is unset, DSA will always be used.
+  uint32 cutoff = 3;
+
+  // Wait cycle in each wait. A smaller wait cycle will get the completion in time, but also
+  // consumes more resources. Defaults to 200.
+  uint64 wait_cycle = 4;
+}

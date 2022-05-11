@@ -47,6 +47,23 @@ cc_library(
     ],
 )
 
+configure_make(
+    name = "idxd-config",
+    autogen = True,
+    configure_in_place = True,
+    configure_options = [
+        "--enable-shared=no",
+    ],
+    lib_source = "@com_github_intel_idxd_config//:all",
+    out_static_libs = [
+        "libaccel-config.a",
+    ],
+    tags = ["skip_on_windows"],
+    deps = [
+        ":libuuid",
+    ],
+)
+
 # Kafka client dependency used by Kafka-mesh filter.
 # librdkafka build generates extra headers that need to be copied into source to get it to compile.
 configure_make(

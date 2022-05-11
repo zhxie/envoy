@@ -48,4 +48,5 @@ CONTRIB_EXTENSIONS = {
     #
 
     "envoy.bootstrap.dml":                                      "//contrib/dml/source:config",
+    "envoy.bootstrap.idxd":                                     "//contrib/idxd/source:config",
 }

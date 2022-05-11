@@ -178,6 +178,7 @@ def envoy_dependencies(skip_targets = []):
     _com_github_gperftools_gperftools()
     _com_github_grpc_grpc()
     _com_github_unicode_org_icu()
+    _com_github_intel_idxd_config()
     _com_github_intel_dml()
     _com_github_intel_ipp_crypto_crypto_mb()
     _com_github_jbeder_yaml_cpp()
@@ -384,6 +385,18 @@ def _com_github_unicode_org_icu():
         patches = ["@envoy//bazel/foreign_cc:icu.patch"],
         patch_args = ["-p1"],
         build_file_content = BUILD_ALL_CONTENT,
+    )
+
+def _com_github_intel_idxd_config():
+    external_http_archive(
+        name = "com_github_intel_idxd_config",
+        patches = ["@envoy//bazel/foreign_cc:idxd-config.patch"],
+        patch_args = ["-p1"],
+        build_file_content = BUILD_ALL_CONTENT,
+    )
+    native.bind(
+        name = "idxd-config",
+        actual = "@envoy//bazel/foreign_cc:idxd-config",
     )
 
 def _com_github_intel_dml():
