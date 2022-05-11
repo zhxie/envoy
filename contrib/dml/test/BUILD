@@ -1,6 +1,7 @@
 load(
     "//bazel:envoy_build_system.bzl",
     "envoy_cc_benchmark_binary",
+    "envoy_cc_test",
     "envoy_cc_test_library",
     "envoy_contrib_package",
 )
@@ -8,6 +9,16 @@ load(
 licenses(["notice"])  # Apache 2
 
 envoy_contrib_package()
+
+envoy_cc_test(
+    name = "config_test",
+    srcs = ["config_test.cc"],
+    deps = [
+        "//contrib/dml/source:config",
+        "//test/mocks/server:factory_context_mocks",
+        "@envoy_api//contrib/envoy/extensions/dml/v3alpha:pkg_cc_proto",
+    ],
+)
 
 envoy_cc_test_library(
     name = "bandwidth_lib",

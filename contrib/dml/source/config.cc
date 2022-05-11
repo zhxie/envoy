@@ -31,9 +31,10 @@ void MemoryInterface::memoryCopy(void* dest, const void* src, size_t n) const {
         dml::execute<dml::hardware>(dml::mem_copy, src_view, dest_view);
     const dml::status_code code = result.status;
     if (code == dml::status_code::ok) {
+      ENVOY_LOG_MISC(trace, "DSA copy memory size {}", n);
       return;
     } else {
-      ENVOY_LOG_MISC(warn, "DSA failed to copy memory with errno {}.", static_cast<uint32_t>(code));
+      ENVOY_LOG_MISC(warn, "DSA failed to copy memory with errno {}", static_cast<uint32_t>(code));
     }
   }
 
@@ -43,7 +44,8 @@ void MemoryInterface::memoryCopy(void* dest, const void* src, size_t n) const {
         dml::execute<dml::software>(dml::mem_copy, src_view, dest_view);
     const dml::status_code code = result.status;
     ASSERT(code == dml::status_code::ok,
-           fmt::format("DML failed to copy memory with errno {}.", static_cast<uint32_t>(code)));
+           fmt::format("DML failed to copy memory with errno {}", static_cast<uint32_t>(code)));
+    ENVOY_LOG_MISC(trace, "DML copy memory size {}", n);
   }
 #endif
 
