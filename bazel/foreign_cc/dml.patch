@@ -17,3 +17,16 @@ index c80043a..f2fc1c9 100644
  
  # Install rules
  install(EXPORT ${PROJECT_NAME}Targets
+diff --git a/sources/middle_layer/src/make_descriptor.cpp b/sources/middle_layer/src/make_descriptor.cpp
+index 8463891..8644ecb 100644
+--- a/sources/middle_layer/src/make_descriptor.cpp
++++ b/sources/middle_layer/src/make_descriptor.cpp
+@@ -51,7 +51,7 @@ namespace dml::detail::ml::impl
+         view.source_address()      = reinterpret_cast<address_t>(src);
+         view.destination_address() = reinterpret_cast<address_t>(dst);
+         view.transfer_size()       = size;
+-        view.flags()               = static_cast<flags_t>(options);
++        view.flags()               = static_cast<flags_t>(options) | to_underlying(flag::block_on_fault);
+ 
+         return dsc;
+     }
