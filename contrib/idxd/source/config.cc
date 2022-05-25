@@ -69,7 +69,8 @@ void MemoryInterface::memoryCopy(void* dest, const void* src, size_t n) {
   memcpy(dest, src, n);
 }
 
-void MemoryInterface::batchMemoryCopy(const std::vector<void*>& dests, const std::vector<const void*>& srcs,
+void MemoryInterface::batchMemoryCopy(const std::vector<void*>& dests,
+                                      const std::vector<const void*>& srcs,
                                       const std::vector<size_t>& ns) {
   ASSERT(dests.size() == srcs.size());
   ASSERT(srcs.size() == ns.size());
@@ -102,8 +103,8 @@ void MemoryInterface::batchMemoryCopy(const std::vector<void*>& dests, const std
 
       // Submit descriptor.
       hw_desc* descriptor =
-        createDescriptor(reinterpret_cast<uint64_t>(record), reinterpret_cast<uint64_t>(dests[i]),
-                         reinterpret_cast<uint64_t>(srcs[i]), n);
+          createDescriptor(reinterpret_cast<uint64_t>(record), reinterpret_cast<uint64_t>(dests[i]),
+                           reinterpret_cast<uint64_t>(srcs[i]), n);
       uint8_t status = submit(descriptor);
       if (status) {
         completion_records.push_back(record);
@@ -132,7 +133,8 @@ void MemoryInterface::batchMemoryCopy(const std::vector<void*>& dests, const std
       wait(record);
       uint8_t status = record->status;
       if (status == DSA_COMP_SUCCESS) {
-        ENVOY_LOG_MISC(trace, "DSA copy memory size {}", descriptor->xfer_size);
+        ENVOY_LOG_MISC(trace, "DSA copy memory size {}",
+                       static_cast<uint32_t>(descriptor->xfer_size));
       } else {
         ENVOY_LOG_MISC(warn, "DSA failed to memory copy with errno {}", status);
         software_ops.push_back(i);
