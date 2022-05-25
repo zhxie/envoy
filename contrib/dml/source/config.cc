@@ -61,6 +61,9 @@ void MemoryInterface::batchMemoryCopy(const std::vector<void*>& dests,
   ASSERT(srcs.size() == ns.size());
 
   const size_t size = srcs.size();
+  if (!size) {
+    return;
+  }
 #ifndef DML_DISABLED
   using Handler = dml::handler<dml::mem_copy_operation, std::allocator<unsigned char>>;
 
