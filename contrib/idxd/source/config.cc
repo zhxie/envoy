@@ -110,41 +110,44 @@ void MemoryInterface::batchMemoryCopy(const std::vector<void*>& dests,
         completion_records.push_back(record);
         descriptors.push_back(descriptor);
         hardware_ops.push_back(i);
-      } else {
-        free(descriptor);
-        free(record);
-        ENVOY_LOG_MISC(warn, "IDXD failed to submit descriptor with errno {}", status);
-        software_ops.push_back(i);
+        continue;
       }
-    }
 
-    // While DSA is copying memory, perform DSA-unmet memory copy in CPU.
-    for (const size_t i : software_ops) {
-      memoryCopy(dests[i], srcs[i], ns[i]);
-    }
-    software_ops.clear();
-
-    // Check and fall failed to software path.
-    const size_t hardware_ops_size = hardware_ops.size();
-    for (size_t i = 0; i < hardware_ops_size; i++) {
-      // Wait completion record until completed.
-      completion_record* record = completion_records[i];
-      hw_desc* descriptor = descriptors[i];
-      wait(record);
-      uint8_t status = record->status;
-      if (status == DSA_COMP_SUCCESS) {
-        ENVOY_LOG_MISC(trace, "DSA copy memory size {}",
-                       static_cast<uint32_t>(descriptor->xfer_size));
-      } else {
-        ENVOY_LOG_MISC(warn, "DSA failed to memory copy with errno {}", status);
-        software_ops.push_back(i);
-      }
       free(descriptor);
       free(record);
+      ENVOY_LOG_MISC(warn, "IDXD failed to submit descriptor with errno {}", status);
     }
-    for (const size_t i : software_ops) {
-      memoryCopy(dests[i], srcs[i], ns[i]);
+
+    software_ops.push_back(i);
+  }
+
+  // While DSA is copying memory, perform DSA-unmet memory copy in CPU.
+  for (const size_t i : software_ops) {
+    memoryCopy(dests[i], srcs[i], ns[i]);
+  }
+  software_ops.clear();
+
+  // Check and fall failed to software path.
+  const size_t hardware_ops_size = hardware_ops.size();
+  for (size_t i = 0; i < hardware_ops_size; i++) {
+    // Wait completion record until completed.
+    completion_record* record = completion_records[i];
+    hw_desc* descriptor = descriptors[i];
+    wait(record);
+    uint8_t status = record->status;
+    uint32_t size = descriptor->xfer_size;
+    free(descriptor);
+    free(record);
+    if (status == DSA_COMP_SUCCESS) {
+      ENVOY_LOG_MISC(trace, "DSA copy memory size {}", size);
+      continue;
     }
+
+    ENVOY_LOG_MISC(warn, "DSA failed to memory copy with errno {}", status);
+    software_ops.push_back(i);
+  }
+  for (const size_t i : software_ops) {
+    memoryCopy(dests[i], srcs[i], ns[i]);
   }
 #else
   for (size_t i = 0; i < size; i++) {
