@@ -171,8 +171,8 @@ hw_desc* MemoryInterface::createDescriptor(uint64_t record, uint64_t dest, uint6
   hw_desc* descriptor = reinterpret_cast<hw_desc*>(malloc(sizeof(struct hw_desc)));
   memset(descriptor, 0, sizeof(struct hw_desc));
 
-  // Request completion and completion address valid.
-  descriptor->flags = IDXD_OP_FLAG_RCR | IDXD_OP_FLAG_CRAV;
+  // Request completion record, completion record address valid and cache control.
+  descriptor->flags = IDXD_OP_FLAG_RCR | IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_CC;
   if (block_on_fault_) {
     descriptor->flags |= IDXD_OP_FLAG_BOF;
   }
