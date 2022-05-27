@@ -244,6 +244,9 @@ void MemoryInterface::initialize(const std::string& device, const std::string& n
 
   // Get block on fault.
   block_on_fault_ = accfg_wq_get_block_on_fault(work_queue_);
+  if (block_on_fault_) {
+    ENVOY_LOG_MISC(debug, "Work queue will block on fault");
+  }
 
   // Get device and its completion size.
   device_ = accfg_wq_get_device(work_queue_);
