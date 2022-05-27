@@ -108,7 +108,7 @@ void MemoryInterface::batchMemoryCopy(const std::vector<void*>& dests,
     }
 
     ENVOY_LOG_MISC(warn, "DSA failed to copy memory with errno {}", static_cast<uint32_t>(code));
-    software_ops.push_back(i);
+    software_ops.push_back(hardware_ops[i]);
   }
   for (const size_t i : software_ops) {
     memoryCopy(dests[i], srcs[i], ns[i]);
