@@ -86,9 +86,10 @@ void MemoryInterface::batchMemoryCopy(const std::vector<void*>& dests,
       dml::data_view dest_view = dml::make_view(dests[i], n);
       hardware_handlers.push_back(dml::submit<dml::hardware>(dml::mem_copy, src_view, dest_view));
       hardware_ops.push_back(i);
-    } else {
-      software_ops.push_back(i);
+      continue;
     }
+
+    software_ops.push_back(i);
   }
 
   // While DSA is copying memory, perform DSA-unmet memory copy in CPU.
@@ -101,12 +102,13 @@ void MemoryInterface::batchMemoryCopy(const std::vector<void*>& dests,
   const size_t hardware_ops_size = hardware_ops.size();
   for (size_t i = 0; i < hardware_ops_size; i++) {
     const dml::status_code code = hardware_handlers[i].get().status;
-    if (code != dml::status_code::ok) {
-      ENVOY_LOG_MISC(warn, "DSA failed to copy memory with errno {}", static_cast<uint32_t>(code));
-      software_ops.push_back(i);
-    } else {
+    if (code == dml::status_code::ok) {
       ENVOY_LOG_MISC(trace, "DSA copy memory");
+      continue;
     }
+
+    ENVOY_LOG_MISC(warn, "DSA failed to copy memory with errno {}", static_cast<uint32_t>(code));
+    software_ops.push_back(i);
   }
   for (const size_t i : software_ops) {
     memoryCopy(dests[i], srcs[i], ns[i]);
