@@ -25,10 +25,7 @@ constexpr absl::string_view cluster_re_pattern = "^cluster\\.((.*?)\\.)";
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 static void BM_CompiledGoogleReMatcher(benchmark::State& state) {
-  envoy::type::matcher::v3::RegexMatcher config;
-  config.mutable_google_re2();
-  config.set_regex(std::string(cluster_re_pattern));
-  const auto matcher = Regex::CompiledGoogleReMatcher(config);
+  const auto matcher = Regex::CompiledGoogleReMatcher(std::string(cluster_re_pattern), true);
   uint32_t passes = 0;
   for (auto _ : state) { // NOLINT
     for (const std::string& cluster_input : clusterInputs()) {
