@@ -52,3 +52,16 @@ envoy_cc_benchmark_binary(
         "//source/common/thread_local:thread_local_lib",
     ],
 )
+
+envoy_cc_benchmark_binary(
+    name = "owasp_speed_test",
+    srcs = ["owasp_speed_test.cc"],
+    external_deps = ["benchmark"],
+    deps = [
+        "//contrib/hyperscan/matching/input_matchers/source:matcher_lib",
+        "//source/common/common:assert_lib",
+        "//source/common/common:regex_lib",
+        "//source/common/common:utility_lib",
+        "//source/common/thread_local:thread_local_lib",
+    ],
+)
