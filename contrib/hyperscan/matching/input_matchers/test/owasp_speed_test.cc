@@ -19,7 +19,6 @@ const std::vector<std::string>& clusterInputs() {
           "cluster.match.",
           "cluster.match.normal",
           "cluster.match.and.a.whole.lot.of.things.coming.after.the.matches.really.too.much.stuff",
-          "rO0ABQ",
       });
 }
 
@@ -619,7 +618,7 @@ static void BM_RE2Single(benchmark::State& state) {
       }
     }
   }
-  RELEASE_ASSERT(passes > 0, "");
+  RELEASE_ASSERT(passes == 0, "");
 }
 BENCHMARK(BM_RE2Single);
 
@@ -638,7 +637,7 @@ static void BM_RE2Set(benchmark::State& state) {
       }
     }
   }
-  RELEASE_ASSERT(passes > 0, "");
+  RELEASE_ASSERT(passes == 0, "");
 }
 BENCHMARK(BM_RE2Set);
 
@@ -676,7 +675,7 @@ static void BM_HyperscanSingle(benchmark::State& state) {
     hs_free_scratch(scratches[i]);
     hs_free_database(databases[i]);
   }
-  RELEASE_ASSERT(passes > 0, "");
+  RELEASE_ASSERT(passes == 0, "");
 }
 BENCHMARK(BM_HyperscanSingle);
 
@@ -711,7 +710,7 @@ static void BM_HyperscanMulti(benchmark::State& state) {
   }
   hs_free_scratch(scratch);
   hs_free_database(database);
-  RELEASE_ASSERT(passes > 0, "");
+  RELEASE_ASSERT(passes == 0, "");
 }
 BENCHMARK(BM_HyperscanMulti);
 
@@ -731,7 +730,7 @@ static void BM_CompiledGoogleReMatcherSingle(benchmark::State& state) {
       }
     }
   }
-  RELEASE_ASSERT(passes > 0, "");
+  RELEASE_ASSERT(passes == 0, "");
 }
 BENCHMARK(BM_CompiledGoogleReMatcherSingle);
 
@@ -754,7 +753,7 @@ static void BM_HyperscanMatcherSingle(benchmark::State& state) {
       }
     }
   }
-  RELEASE_ASSERT(passes > 0, "");
+  RELEASE_ASSERT(passes == 0, "");
 }
 BENCHMARK(BM_HyperscanMatcherSingle);
 
@@ -776,7 +775,7 @@ static void BM_HyperscanMatcherMulti(benchmark::State& state) {
       }
     }
   }
-  RELEASE_ASSERT(passes > 0, "");
+  RELEASE_ASSERT(passes == 0, "");
 }
 BENCHMARK(BM_HyperscanMatcherMulti);
 
