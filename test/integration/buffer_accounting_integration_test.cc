@@ -123,6 +123,7 @@ public:
       : SocketInterfaceSwap(Network::Socket::Type::Stream),
         HttpIntegrationTest(
             std::get<0>(GetParam()).downstream_protocol, std::get<0>(GetParam()).version,
+            std::get<0>(GetParam()).interface,
             ConfigHelper::httpProxyConfig(
                 /*downstream_is_quic=*/std::get<0>(GetParam()).downstream_protocol ==
                 Http::CodecType::HTTP3)) {
@@ -472,6 +473,7 @@ public:
   ProtocolsBufferWatermarksTest()
       : HttpIntegrationTest(
             std::get<0>(GetParam()).downstream_protocol, std::get<0>(GetParam()).version,
+            std::get<0>(GetParam()).interface,
             ConfigHelper::httpProxyConfig(
                 /*downstream_is_quic=*/std::get<0>(GetParam()).downstream_protocol ==
                 Http::CodecType::HTTP3)) {
