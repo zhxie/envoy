@@ -2417,6 +2417,13 @@ public:
       : SocketInterfaceSwap(GetParam().downstream_protocol == Http::CodecType::HTTP3
                                 ? Network::Socket::Type::Datagram
                                 : Network::Socket::Type::Stream) {}
+
+  void SetUp() override {
+    // TODO(zhxie): io_uring is not compatible with SocketInterfaceSwap.
+    if (GetParam().interface == Network::DefaultSocketInterface::IoUring) {
+      GTEST_SKIP();
+    }
+  }
 };
 
 INSTANTIATE_TEST_SUITE_P(IpVersions, SocketSwappableMultiplexedIntegrationTest,

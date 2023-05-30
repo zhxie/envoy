@@ -79,6 +79,13 @@ public:
                                       deferredProcessing(GetParam()) ? "true" : "false");
   }
 
+  void SetUp() override {
+    // TODO(zhxie): io_uring is not compatible with SocketInterfaceSwap.
+    if (std::get<1>(GetParam()) == Network::DefaultSocketInterface::IoUring) {
+      GTEST_SKIP();
+    }
+  }
+
 protected:
   void initializeUpstreamFloodTest();
   std::vector<char> serializeFrames(const Http2Frame& frame, uint32_t num_frames);

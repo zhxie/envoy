@@ -149,6 +149,13 @@ public:
     setUpstreamProtocol(protocol_test_params.upstream_protocol);
   }
 
+  void SetUp() override {
+    // TODO(zhxie): io_uring is not compatible with SocketInterfaceSwap.
+    if (std::get<0>(GetParam()).interface == Network::DefaultSocketInterface::IoUring) {
+      GTEST_SKIP();
+    }
+  }
+
 protected:
   // For testing purposes, track >= 4096B accounts.
   std::shared_ptr<Buffer::TrackedWatermarkBufferFactory> buffer_factory_;
