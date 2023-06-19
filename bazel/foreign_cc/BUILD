@@ -107,10 +107,13 @@ configure_make(
         "--disable-shared",
         "--enable-static",
     ],
-    # Workaround for the issue with statically linked libstdc++
-    # using -l:libstdc++.a.
+    # Workaround for the issue with statically linked libstdc++ using -l:libstdc++.a.
+    # Colm is a compile-time dependency of Hyperscan and will not be used at runtime, so we escape
+    # it from the sanitizer check safely.
     env = {
-        "CXXFLAGS": "-lstdc++ -Wno-unused-command-line-argument",
+        "CFLAGS": "-fno-sanitize=all",
+        "CXXFLAGS": "-lstdc++ -Wno-unused-command-line-argument -fno-sanitize=all",
+        "LDFLAGS": "-fno-sanitize=all",
     },
     lib_source = "@net_colm_open_source_colm//:all",
     out_binaries = ["colm"],
@@ -129,10 +132,13 @@ configure_make(
         "--enable-static",
         "--with-colm=$EXT_BUILD_DEPS/colm",
     ],
-    # Workaround for the issue with statically linked libstdc++
-    # using -l:libstdc++.a.
+    # Workaround for the issue with statically linked libstdc++ using -l:libstdc++.a.
+    # Ragel is a compile-time dependency of Hyperscan and will not be used at runtime, so we escape
+    # it from the sanitizer check safely.
     env = {
-        "CXXFLAGS": "-lstdc++ -Wno-unused-command-line-argument",
+        "CFLAGS": "-fno-sanitize=all",
+        "CXXFLAGS": "-lstdc++ -Wno-unused-command-line-argument -fno-sanitize=all",
+        "LDFLAGS": "-fno-sanitize=all",
     },
     lib_source = "@net_colm_open_source_ragel//:all",
     out_binaries = ["ragel"],
