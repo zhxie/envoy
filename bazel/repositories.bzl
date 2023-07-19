@@ -301,6 +301,7 @@ def envoy_dependencies(skip_targets = []):
     _com_github_zlib_ng_zlib_ng()
     _org_boost()
     _org_brotli()
+    _org_llhttp()
     _com_github_facebook_zstd()
     _re2()
     _upb()
@@ -601,6 +602,17 @@ def _org_brotli():
     native.bind(
         name = "brotlidec",
         actual = "@org_brotli//:brotlidec",
+    )
+
+def _org_llhttp():
+    external_http_archive(
+        name = "org_llhttp",
+        build_file_content = BUILD_ALL_CONTENT,
+    )
+
+    native.bind(
+        name = "llhttp",
+        actual = "@envoy//bazel/foreign_cc:llhttp",
     )
 
 def _com_github_facebook_zstd():

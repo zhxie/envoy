@@ -320,6 +320,23 @@ envoy_cmake(
 )
 
 envoy_cmake(
+    name = "llhttp",
+    build_data = ["@org_llhttp//:all"],
+    cache_entries = {
+        "BUILD_SHARED_LIBS": "off",
+        "BUILD_STATIC_LIBS": "on",
+    },
+    default_cache_entries = {
+        "CMAKE_BUILD_TYPE": "Release",
+    },
+    lib_source = "@org_llhttp//:all",
+    out_static_libs = select({
+        "//bazel:windows_x86_64": ["llhttp.lib"],
+        "//conditions:default": ["libllhttp.a"],
+    }),
+)
+
+envoy_cmake(
     name = "llvm",
     cache_entries = {
         # Disable both: BUILD and INCLUDE, since some of the INCLUDE

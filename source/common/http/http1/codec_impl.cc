@@ -23,6 +23,7 @@
 #include "source/common/http/http1/balsa_parser.h"
 #include "source/common/http/http1/header_formatter.h"
 #include "source/common/http/http1/legacy_parser_impl.h"
+#include "source/common/http/http1/llhttp_parser_impl.h"
 #include "source/common/http/utility.h"
 #include "source/common/runtime/runtime_features.h"
 
@@ -537,7 +538,7 @@ ConnectionImpl::ConnectionImpl(Network::Connection& connection, CodecStats& stat
     parser_ = std::make_unique<BalsaParser>(type, this, max_headers_kb_ * 1024, enableTrailers(),
                                             codec_settings_.allow_custom_methods_);
   } else {
-    parser_ = std::make_unique<LegacyHttpParserImpl>(type, this);
+    parser_ = std::make_unique<LlhttpHttpParserImpl>(type, this);
   }
 }
 
