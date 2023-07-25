@@ -176,6 +176,13 @@ configure_make(
     alwayslink = True,
 )
 
+configure_make(
+    name = "uuid",
+    configure_in_place = True,
+    lib_source = "@io_sourceforge_libuuid//:all",
+    out_static_libs = ["libuuid.a"],
+)
+
 cc_library(
     name = "unicode_icu",
     tags = ["skip_on_windows"],
@@ -278,6 +285,23 @@ envoy_cmake(
         ":nghttp2",
         "//external:ssl",
         "//external:zlib",
+    ],
+)
+
+envoy_cmake(
+    name = "dml",
+    cache_entries = {
+        "DML_BUILD_EXAMPLES": "off",
+        "DML_BUILD_TESTS": "off",
+    },
+    copts = ["-I$EXT_BUILD_DEPS/uuid/include"],
+    lib_source = "@com_github_intel_dml//:all",
+    out_static_libs = [
+        "libdml.a",
+        "libdmlhl.a",
+    ],
+    deps = [
+        ":uuid",
     ],
 )
 
