@@ -45,7 +45,7 @@ private:
   };
   struct Operation {
     const Buffer::RawSlice& src_;
-    Buffer::RawSlice dest_;
+    uint8_t* dest_;
   };
 
   std::chrono::milliseconds poll_delay_;

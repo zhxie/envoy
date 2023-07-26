@@ -656,6 +656,7 @@ public:
   void addBufferFragment(BufferFragment& fragment) override;
   void add(absl::string_view data) override;
   void add(const Instance& data) override;
+  Slice& addEmptySlice(uint64_t sizes);
   void prepend(absl::string_view data) override;
   void prepend(Instance& data) override;
   void copyOut(size_t start, uint64_t size, void* data) const override;

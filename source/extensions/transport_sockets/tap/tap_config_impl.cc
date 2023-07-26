@@ -66,39 +66,30 @@ void TapThreadLocal::process() {
   ENVOY_LOG(debug, "DSA process {} requests", queue_.size());
   using Handler = dml::handler<dml::mem_copy_operation, std::allocator<std::uint8_t>>;
   std::vector<Buffer::InstancePtr> buffers;
-  std::vector<Buffer::Reservation> reservations;
   std::vector<Operation> cpu_operations;
   std::vector<Operation> dml_operations;
   std::vector<Handler> dml_handlers;
   for (const Request& request : queue_) {
-    Buffer::InstancePtr buffer = std::make_unique<Buffer::OwnedImpl>();
-    Buffer::Reservation reservation = buffer->reserveForRead();
-
+    std::unique_ptr<Buffer::OwnedImpl> buffer = std::make_unique<Buffer::OwnedImpl>();
     const Buffer::RawSliceVector raw_slices = request.buffer_.getRawSlices();
-    RELEASE_ASSERT(raw_slices.size() <= reservation.numSlices(),
-                   "source slice size exceeding reservation behavior has not been implemented");
-    for (size_t i = 0; i < raw_slices.size(); i++) {
-      const Buffer::RawSlice& src = raw_slices[i];
-      Buffer::RawSlice& dest = reservation.slices()[i];
-      RELEASE_ASSERT(
-          src.len_ <= Buffer::Slice::default_slice_size_,
-          "source buffer length exceeding destination behavior has not been implemented");
-      dest.len_ = src.len_;
-      Operation operation{src, dest};
+    for (const Buffer::RawSlice& src : raw_slices) {
+      Buffer::Slice& dest = buffer->addEmptySlice(src.len_);
+      Buffer::Slice::Reservation reservation = dest.reserve(src.len_);
+      Operation operation{src, reinterpret_cast<uint8_t*>(reservation.mem_)};
       if (src.len_ < MIN_BUFFER_SIZE) {
         cpu_operations.push_back(operation);
       } else {
         dml::const_data_view src_view =
             dml::make_view(reinterpret_cast<const uint8_t*>(src.mem_), src.len_);
-        dml::data_view dest_view = dml::make_view(reinterpret_cast<uint8_t*>(dest.mem_), src.len_);
+        dml::data_view dest_view = dml::make_view(dest.data(), src.len_);
         Handler handler = dml::submit<dml::automatic>(dml::mem_copy, src_view, dest_view);
         ASSERT(handler.valid());
         dml_handlers.push_back(std::move(handler));
         dml_operations.push_back(operation);
       }
+      dest.commit(reservation);
     }
 
-    reservations.push_back(std::move(reservation));
     buffers.push_back(std::move(buffer));
   }
   ENVOY_LOG(debug, "DML process {} operations and CPU process {} operations", dml_handlers.size(),
@@ -106,7 +97,7 @@ void TapThreadLocal::process() {
 
   // Perform CPU operations on small slices.
   for (const Operation& operation : cpu_operations) {
-    memcpy(operation.dest_.mem_, operation.src_.mem_, operation.src_.len_); // NOLINT(safe-memcpy)
+    memcpy(operation.dest_, operation.src_.mem_, operation.src_.len_); // NOLINT(safe-memcpy)
     stats_.cpu_copy_size_.recordValue(operation.src_.len_);
   }
 
@@ -117,18 +108,17 @@ void TapThreadLocal::process() {
     dml::status_code result = handler.get().status;
     if (result != dml::status_code::ok) {
       ENVOY_LOG(warn, "DML process operation from {} to {} size {} failed with result {}",
-                fmt::ptr(operation.src_.mem_), fmt::ptr(operation.dest_.mem_), operation.src_.len_,
+                fmt::ptr(operation.src_.mem_), fmt::ptr(operation.dest_), operation.src_.len_,
                 static_cast<uint32_t>(result));
-      memcpy(operation.dest_.mem_, operation.src_.mem_, operation.src_.len_); // NOLINT(safe-memcpy)
+      memcpy(operation.dest_, operation.src_.mem_, operation.src_.len_); // NOLINT(safe-memcpy)
       stats_.dml_copy_error_size_.recordValue(operation.src_.len_);
     } else {
       stats_.dml_copy_size_.recordValue(operation.src_.len_);
     }
   }
 
-  // Commit reservations, add to the map and trigger callbacks.
+  // Add copy to the map and trigger callbacks.
   for (size_t i = 0; i < queue_.size(); i++) {
-    reservations[i].commit(queue_[i].buffer_.length());
     map_[queue_[i].handle_.fdDoNotUse()] = std::move(buffers[i]);
     queue_[i].handle_.activateFileEvents(Event::FileReadyType::Write);
   }

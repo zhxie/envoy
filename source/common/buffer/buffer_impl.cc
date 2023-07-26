@@ -66,6 +66,12 @@ void OwnedImpl::add(const Instance& data) {
   }
 }
 
+Slice& OwnedImpl::addEmptySlice(uint64_t size) {
+  slices_.emplace_back(Slice(size, account_));
+  length_ += size;
+  return slices_.back();
+}
+
 void OwnedImpl::prepend(absl::string_view data) {
   uint64_t size = data.size();
   bool new_slice_needed = slices_.empty();
