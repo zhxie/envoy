@@ -5,10 +5,131 @@
 #include "source/common/common/assert.h"
 #include "source/common/network/utility.h"
 
+#include "dml/dml.hpp"
+
 namespace Envoy {
 namespace Extensions {
 namespace TransportSockets {
 namespace Tap {
+
+TapThreadLocal::TapThreadLocal(std::chrono::milliseconds poll_delay, Event::Dispatcher& dispatcher)
+    : poll_delay_(poll_delay), timer_(dispatcher.createTimer([this]() { process(); })) {}
+
+Buffer::InstancePtr TapThreadLocal::addRequest(Network::IoHandle& handle,
+                                               Buffer::Instance& buffer) {
+  // After activating write event on copy completion, pop the result.
+  auto it = map_.find(handle.fdDoNotUse());
+  if (it != map_.end()) {
+    Buffer::InstancePtr ptr = std::move(it->second);
+    RELEASE_ASSERT(ptr->length() == buffer.length(),
+                   "buffer length changing behavior has not been implemented");
+    map_.erase(it);
+    return ptr;
+  }
+
+  // All slices in the buffer are too small to use DSA copy, use CPU copy instead.
+  size_t worth_dsa = 0;
+  for (const Buffer::RawSlice& slice : buffer.getRawSlices()) {
+    if (slice.len_ >= MIN_BUFFER_SIZE) {
+      worth_dsa += 1;
+    }
+  }
+  if (!worth_dsa) {
+    Buffer::InstancePtr copy = std::make_unique<Buffer::OwnedImpl>(buffer);
+    return copy;
+  }
+
+  // Add a new request and trigger DSA copy.
+  Request request{handle, buffer};
+  queue_.push_back(request);
+  queue_size_ += worth_dsa;
+  if (queue_size_ >= BATCH_SIZE) {
+    // There are more then BATCH_SIZE requests in the queue and we can process them.
+    stopTimer();
+    process();
+  } else if (queue_size_ == worth_dsa) {
+    // First request in the queue, start the queue timer.
+    startTimer();
+  }
+  return nullptr;
+}
+
+void TapThreadLocal::process() {
+  // Submit DML operations.
+  ENVOY_LOG(debug, "DML process {} requests", queue_.size());
+  using Handler = dml::handler<dml::mem_copy_operation, std::allocator<std::uint8_t>>;
+  std::vector<Buffer::InstancePtr> buffers;
+  std::vector<Buffer::Reservation> reservations;
+  std::vector<Operation> cpu_operations;
+  std::vector<Operation> dml_operations;
+  std::vector<Handler> dml_handlers;
+  for (const Request& request : queue_) {
+    Buffer::InstancePtr buffer = std::make_unique<Buffer::OwnedImpl>();
+    Buffer::Reservation reservation = buffer->reserveForRead();
+
+    const Buffer::RawSliceVector raw_slices = request.buffer_.getRawSlices();
+    RELEASE_ASSERT(raw_slices.size() <= reservation.numSlices(),
+                   "source slice size exceeding reservation behavior has not been implemented");
+    for (size_t i = 0; i < raw_slices.size(); i++) {
+      const Buffer::RawSlice& src = raw_slices[i];
+      Buffer::RawSlice& dest = reservation.slices()[i];
+      RELEASE_ASSERT(
+          src.len_ <= Buffer::Slice::default_slice_size_,
+          "source buffer length exceeding destination behavior has not been implemented");
+      dest.len_ = src.len_;
+      Operation operation{src, dest};
+      if (src.len_ < MIN_BUFFER_SIZE) {
+        cpu_operations.push_back(operation);
+      } else {
+        dml::const_data_view src_view =
+            dml::make_view(reinterpret_cast<const uint8_t*>(src.mem_), src.len_);
+        dml::data_view dest_view = dml::make_view(reinterpret_cast<uint8_t*>(dest.mem_), src.len_);
+        Handler handler = dml::submit<dml::automatic>(dml::mem_copy, src_view, dest_view);
+        ASSERT(handler.valid());
+        dml_handlers.push_back(std::move(handler));
+        dml_operations.push_back(operation);
+      }
+    }
+
+    reservations.push_back(std::move(reservation));
+    buffers.push_back(std::move(buffer));
+  }
+  ENVOY_LOG(debug, "DML process {} operations and CPU process {} operations", dml_handlers.size(),
+            cpu_operations.size());
+
+  // Perform CPU operations on small slices.
+  for (const Operation& operation : cpu_operations) {
+    memcpy(operation.dest_.mem_, operation.src_.mem_, operation.src_.len_); // NOLINT(safe-memcpy)
+  }
+
+  // Wait DML operations to complete.
+  for (size_t i = 0; i < dml_handlers.size(); i++) {
+    Handler& handler = dml_handlers[i];
+    Operation& operation = dml_operations[i];
+    dml::status_code result = handler.get().status;
+    if (result != dml::status_code::ok) {
+      ENVOY_LOG(warn, "DML process operation from {} to {} size {} failed with result {}",
+                fmt::ptr(operation.src_.mem_), fmt::ptr(operation.dest_.mem_), operation.src_.len_,
+                static_cast<uint32_t>(result));
+      memcpy(operation.dest_.mem_, operation.src_.mem_, operation.src_.len_); // NOLINT(safe-memcpy)
+    }
+  }
+
+  // Commit reservations, add to the map and trigger callbacks.
+  for (size_t i = 0; i < queue_.size(); i++) {
+    reservations[i].commit(queue_[i].buffer_.length());
+    map_[queue_[i].handle_.fdDoNotUse()] = std::move(buffers[i]);
+    queue_[i].handle_.activateFileEvents(Event::FileReadyType::Write);
+  }
+
+  // Clean up the queue.
+  queue_.clear();
+  queue_size_ = 0;
+}
+
+void TapThreadLocal::startTimer() { timer_->enableHRTimer(poll_delay_); }
+
+void TapThreadLocal::stopTimer() { timer_->disableTimer(); }
 
 namespace TapCommon = Extensions::Common::Tap;
 

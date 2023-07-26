@@ -17,6 +17,7 @@ void TapSocket::setTransportSocketCallbacks(Network::TransportSocketCallbacks& c
   ASSERT(!tapper_);
   transport_socket_->setTransportSocketCallbacks(callbacks);
   tapper_ = config_ ? config_->createPerSocketTapper(callbacks.connection()) : nullptr;
+  handle_ = callbacks.ioHandle();
 }
 
 void TapSocket::closeSocket(Network::ConnectionEvent event) {
@@ -38,10 +39,13 @@ Network::IoResult TapSocket::doRead(Buffer::Instance& buffer) {
 
 Network::IoResult TapSocket::doWrite(Buffer::Instance& buffer, bool end_stream) {
   // TODO(htuch): avoid copy.
-  Buffer::OwnedImpl copy(buffer);
+  Buffer::InstancePtr copy = config_->addRequest(*handle_, buffer);
+  if (!copy) {
+    return {Network::PostIoAction::KeepOpen, 0, false};
+  }
   Network::IoResult result = transport_socket_->doWrite(buffer, end_stream);
   if (tapper_ != nullptr && result.bytes_processed_ > 0) {
-    tapper_->onWrite(copy, result.bytes_processed_, end_stream);
+    tapper_->onWrite(*copy, result.bytes_processed_, end_stream);
   }
   return result;
 }

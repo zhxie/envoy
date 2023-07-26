@@ -25,6 +25,7 @@ envoy_cc_library(
     name = "tap_config_impl",
     srcs = ["tap_config_impl.cc"],
     hdrs = ["tap_config_impl.h"],
+    external_deps = ["dml"],
     deps = [
         ":tap_config_interface",
         "//source/common/network:utility_lib",

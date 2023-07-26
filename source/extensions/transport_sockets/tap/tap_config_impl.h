@@ -12,6 +12,37 @@ namespace Extensions {
 namespace TransportSockets {
 namespace Tap {
 
+class TapThreadLocal : public ThreadLocal::ThreadLocalObject,
+                       public Logger::Loggable<Logger::Id::tap> {
+public:
+  TapThreadLocal(std::chrono::milliseconds poll_delay, Event::Dispatcher& dispatcher);
+
+  Buffer::InstancePtr addRequest(Network::IoHandle& handle, Buffer::Instance& buffer);
+
+private:
+  static constexpr size_t MIN_BUFFER_SIZE = 8192;
+  static constexpr size_t BATCH_SIZE = 128;
+
+  struct Request {
+    Network::IoHandle& handle_;
+    Buffer::Instance& buffer_;
+  };
+  struct Operation {
+    const Buffer::RawSlice& src_;
+    Buffer::RawSlice dest_;
+  };
+
+  std::chrono::milliseconds poll_delay_;
+  Event::TimerPtr timer_{};
+  std::vector<Request> queue_{};
+  size_t queue_size_{};
+  absl::flat_hash_map<os_fd_t, Buffer::InstancePtr> map_{};
+
+  void process();
+  void startTimer();
+  void stopTimer();
+};
+
 class PerSocketTapperImpl : public PerSocketTapper {
 public:
   PerSocketTapperImpl(SocketTapConfigSharedPtr config, const Network::Connection& connection);
@@ -51,9 +82,14 @@ class SocketTapConfigImpl : public Extensions::Common::Tap::TapConfigBaseImpl,
                             public std::enable_shared_from_this<SocketTapConfigImpl> {
 public:
   SocketTapConfigImpl(const envoy::config::tap::v3::TapConfig& proto_config,
-                      Extensions::Common::Tap::Sink* admin_streamer, TimeSource& time_system)
+                      Extensions::Common::Tap::Sink* admin_streamer, TimeSource& time_system,
+                      ThreadLocal::SlotAllocator& tls)
       : Extensions::Common::Tap::TapConfigBaseImpl(std::move(proto_config), admin_streamer),
-        time_source_(time_system) {}
+        time_source_(time_system), tls_(ThreadLocal::TypedSlot<TapThreadLocal>::makeUnique(tls)) {
+    tls_->set([](Event::Dispatcher& dispatcher) {
+      return std::make_shared<TapThreadLocal>(std::chrono::milliseconds(50), dispatcher);
+    });
+  }
 
   // SocketTapConfig
   PerSocketTapperPtr createPerSocketTapper(const Network::Connection& connection) override {
@@ -61,8 +97,13 @@ public:
   }
   TimeSource& timeSource() const override { return time_source_; }
 
+  Buffer::InstancePtr addRequest(Network::IoHandle& handle, Buffer::Instance& buffer) override {
+    return tls_->get()->addRequest(handle, buffer);
+  }
+
 private:
   TimeSource& time_source_;
+  ThreadLocal::TypedSlotPtr<TapThreadLocal> tls_;
 
   friend class PerSocketTapperImpl;
 };

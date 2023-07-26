@@ -57,6 +57,8 @@ public:
    * @return time source to use for stamping events.
    */
   virtual TimeSource& timeSource() const PURE;
+
+  virtual Buffer::InstancePtr addRequest(Network::IoHandle& handle, Buffer::Instance& buffer) PURE;
 };
 
 using SocketTapConfigSharedPtr = std::shared_ptr<SocketTapConfig>;

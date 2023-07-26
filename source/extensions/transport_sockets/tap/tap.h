@@ -26,6 +26,7 @@ public:
 private:
   SocketTapConfigSharedPtr config_;
   PerSocketTapperPtr tapper_;
+  OptRef<Network::IoHandle> handle_;
 };
 
 class TapSocketFactory : public Common::Tap::ExtensionConfigBase, public PassthroughFactory {
