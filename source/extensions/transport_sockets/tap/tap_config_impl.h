@@ -100,12 +100,13 @@ class SocketTapConfigImpl : public Extensions::Common::Tap::TapConfigBaseImpl,
 public:
   SocketTapConfigImpl(const envoy::config::tap::v3::TapConfig& proto_config,
                       Extensions::Common::Tap::Sink* admin_streamer, TimeSource& time_system,
-                      ThreadLocal::SlotAllocator& tls, Stats::Scope& scope)
+                      ThreadLocal::SlotAllocator& tls, std::chrono::milliseconds poll_delay,
+                      Stats::Scope& scope)
       : Extensions::Common::Tap::TapConfigBaseImpl(std::move(proto_config), admin_streamer),
         time_source_(time_system), tls_(ThreadLocal::TypedSlot<TapThreadLocal>::makeUnique(tls)),
         stats_(generateTapStats("tap", scope)) {
-    tls_->set([this](Event::Dispatcher& dispatcher) {
-      return std::make_shared<TapThreadLocal>(std::chrono::milliseconds(50), dispatcher, stats_);
+    tls_->set([this, poll_delay](Event::Dispatcher& dispatcher) {
+      return std::make_shared<TapThreadLocal>(poll_delay, dispatcher, stats_);
     });
   }
 

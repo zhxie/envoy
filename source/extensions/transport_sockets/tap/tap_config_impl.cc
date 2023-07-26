@@ -40,7 +40,7 @@ Buffer::InstancePtr TapThreadLocal::addRequest(Network::IoHandle& handle,
       worth_dsa += 1;
     }
   }
-  if (!worth_dsa) {
+  if (!worth_dsa || poll_delay_ == std::chrono::milliseconds(0)) {
     Buffer::InstancePtr copy = std::make_unique<Buffer::OwnedImpl>(buffer);
     stats_.escaped_size_.recordValue(copy->length());
     return copy;

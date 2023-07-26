@@ -18,20 +18,21 @@ namespace Tap {
 class SocketTapConfigFactoryImpl : public Extensions::Common::Tap::TapConfigFactory {
 public:
   SocketTapConfigFactoryImpl(TimeSource& time_source, ThreadLocal::SlotAllocator& tls,
-                             Stats::Scope& scope)
-      : time_source_(time_source), tls_(tls), scope_(scope) {}
+                             std::chrono::milliseconds poll_delay, Stats::Scope& scope)
+      : time_source_(time_source), tls_(tls), poll_delay_(poll_delay), scope_(scope) {}
 
   // TapConfigFactory
   Extensions::Common::Tap::TapConfigSharedPtr
   createConfigFromProto(const envoy::config::tap::v3::TapConfig& proto_config,
                         Extensions::Common::Tap::Sink* admin_streamer) override {
     return std::make_shared<SocketTapConfigImpl>(std::move(proto_config), admin_streamer,
-                                                 time_source_, tls_, scope_);
+                                                 time_source_, tls_, poll_delay_, scope_);
   }
 
 private:
   TimeSource& time_source_;
   ThreadLocal::SlotAllocator& tls_;
+  const std::chrono::milliseconds poll_delay_;
   Stats::Scope& scope_;
 };
 
@@ -42,6 +43,8 @@ UpstreamTapSocketConfigFactory::createTransportSocketFactory(
   const auto& outer_config =
       MessageUtil::downcastAndValidate<const envoy::extensions::transport_sockets::tap::v3::Tap&>(
           message, context.messageValidationVisitor());
+  std::chrono::milliseconds poll_delay =
+      std::chrono::milliseconds(PROTOBUF_GET_MS_OR_DEFAULT(outer_config, poll_delay, 0));
   auto& inner_config_factory = Config::Utility::getAndCheckFactory<
       Server::Configuration::UpstreamTransportSocketConfigFactory>(outer_config.transport_socket());
   ProtobufTypes::MessagePtr inner_factory_config = Config::Utility::translateToFactoryConfig(
@@ -54,7 +57,7 @@ UpstreamTapSocketConfigFactory::createTransportSocketFactory(
       outer_config,
       std::make_unique<SocketTapConfigFactoryImpl>(
           server_context.mainThreadDispatcher().timeSource(), server_context.threadLocal(),
-          context.statsScope()),
+          poll_delay, context.statsScope()),
       server_context.admin(), server_context.singletonManager(), server_context.threadLocal(),
       server_context.mainThreadDispatcher(), std::move(inner_transport_factory));
 }
@@ -66,6 +69,8 @@ DownstreamTapSocketConfigFactory::createTransportSocketFactory(
   const auto& outer_config =
       MessageUtil::downcastAndValidate<const envoy::extensions::transport_sockets::tap::v3::Tap&>(
           message, context.messageValidationVisitor());
+  std::chrono::milliseconds poll_delay =
+      std::chrono::milliseconds(PROTOBUF_GET_MS_OR_DEFAULT(outer_config, poll_delay, 0));
   auto& inner_config_factory = Config::Utility::getAndCheckFactory<
       Server::Configuration::DownstreamTransportSocketConfigFactory>(
       outer_config.transport_socket());
@@ -78,7 +83,7 @@ DownstreamTapSocketConfigFactory::createTransportSocketFactory(
       outer_config,
       std::make_unique<SocketTapConfigFactoryImpl>(
           server_context.mainThreadDispatcher().timeSource(), server_context.threadLocal(),
-          context.statsScope()),
+          poll_delay, context.statsScope()),
       server_context.admin(), server_context.singletonManager(), server_context.threadLocal(),
       server_context.mainThreadDispatcher(), std::move(inner_transport_factory));
 }

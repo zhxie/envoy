@@ -5,6 +5,8 @@ package envoy.extensions.transport_sockets.tap.v3;
 import "envoy/config/core/v3/base.proto";
 import "envoy/extensions/common/tap/v3/common.proto";
 
+import "google/protobuf/duration.proto";
+
 import "udpa/annotations/status.proto";
 import "udpa/annotations/versioning.proto";
 import "validate/validate.proto";
@@ -30,4 +32,6 @@ message Tap {
 
   // The underlying transport socket being wrapped.
   config.core.v3.TransportSocket transport_socket = 2 [(validate.rules).message = {required: true}];
+
+  google.protobuf.Duration poll_delay = 3;
 }
