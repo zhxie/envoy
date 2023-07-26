@@ -3,6 +3,8 @@
 #include "envoy/config/tap/v3/common.pb.h"
 #include "envoy/data/tap/v3/transport.pb.h"
 #include "envoy/event/timer.h"
+#include "envoy/stats/scope.h"
+#include "envoy/stats/stats_macros.h"
 
 #include "source/extensions/common/tap/tap_config_base.h"
 #include "source/extensions/transport_sockets/tap/tap_config.h"
@@ -12,10 +14,24 @@ namespace Extensions {
 namespace TransportSockets {
 namespace Tap {
 
+#define ALL_TAP_STATS(HISTOGRAM)                                                                   \
+  HISTOGRAM(escaped_size, Unspecified)                                                             \
+  HISTOGRAM(cpu_copy_size, Unspecified)                                                            \
+  HISTOGRAM(dml_pipeline_size, Unspecified)                                                        \
+  HISTOGRAM(dml_copy_size, Unspecified)                                                            \
+  HISTOGRAM(dml_copy_error_size, Unspecified)
+
+struct TapStats {
+  ALL_TAP_STATS(GENERATE_HISTOGRAM_STRUCT)
+};
+
+TapStats generateTapStats(const std::string& prefix, Stats::Scope& scope);
+
 class TapThreadLocal : public ThreadLocal::ThreadLocalObject,
                        public Logger::Loggable<Logger::Id::tap> {
 public:
-  TapThreadLocal(std::chrono::milliseconds poll_delay, Event::Dispatcher& dispatcher);
+  TapThreadLocal(std::chrono::milliseconds poll_delay, Event::Dispatcher& dispatcher,
+                 TapStats& stats);
 
   Buffer::InstancePtr addRequest(Network::IoHandle& handle, Buffer::Instance& buffer);
 
@@ -33,7 +49,8 @@ private:
   };
 
   std::chrono::milliseconds poll_delay_;
-  Event::TimerPtr timer_{};
+  Event::TimerPtr timer_;
+  TapStats& stats_;
   std::vector<Request> queue_{};
   size_t queue_size_{};
   absl::flat_hash_map<os_fd_t, Buffer::InstancePtr> map_{};
@@ -83,11 +100,12 @@ class SocketTapConfigImpl : public Extensions::Common::Tap::TapConfigBaseImpl,
 public:
   SocketTapConfigImpl(const envoy::config::tap::v3::TapConfig& proto_config,
                       Extensions::Common::Tap::Sink* admin_streamer, TimeSource& time_system,
-                      ThreadLocal::SlotAllocator& tls)
+                      ThreadLocal::SlotAllocator& tls, Stats::Scope& scope)
       : Extensions::Common::Tap::TapConfigBaseImpl(std::move(proto_config), admin_streamer),
-        time_source_(time_system), tls_(ThreadLocal::TypedSlot<TapThreadLocal>::makeUnique(tls)) {
-    tls_->set([](Event::Dispatcher& dispatcher) {
-      return std::make_shared<TapThreadLocal>(std::chrono::milliseconds(50), dispatcher);
+        time_source_(time_system), tls_(ThreadLocal::TypedSlot<TapThreadLocal>::makeUnique(tls)),
+        stats_(generateTapStats("tap", scope)) {
+    tls_->set([this](Event::Dispatcher& dispatcher) {
+      return std::make_shared<TapThreadLocal>(std::chrono::milliseconds(50), dispatcher, stats_);
     });
   }
 
@@ -104,6 +122,7 @@ public:
 private:
   TimeSource& time_source_;
   ThreadLocal::TypedSlotPtr<TapThreadLocal> tls_;
+  TapStats stats_;
 
   friend class PerSocketTapperImpl;
 };

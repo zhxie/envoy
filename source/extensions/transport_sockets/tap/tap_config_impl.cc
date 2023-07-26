@@ -12,8 +12,14 @@ namespace Extensions {
 namespace TransportSockets {
 namespace Tap {
 
-TapThreadLocal::TapThreadLocal(std::chrono::milliseconds poll_delay, Event::Dispatcher& dispatcher)
-    : poll_delay_(poll_delay), timer_(dispatcher.createTimer([this]() { process(); })) {}
+TapStats generateTapStats(const std::string& prefix, Stats::Scope& scope) {
+  return TapStats{ALL_TAP_STATS(POOL_HISTOGRAM_PREFIX(scope, prefix))};
+}
+
+TapThreadLocal::TapThreadLocal(std::chrono::milliseconds poll_delay, Event::Dispatcher& dispatcher,
+                               TapStats& stats)
+    : poll_delay_(poll_delay), timer_(dispatcher.createTimer([this]() { process(); })),
+      stats_(stats) {}
 
 Buffer::InstancePtr TapThreadLocal::addRequest(Network::IoHandle& handle,
                                                Buffer::Instance& buffer) {
@@ -36,10 +42,11 @@ Buffer::InstancePtr TapThreadLocal::addRequest(Network::IoHandle& handle,
   }
   if (!worth_dsa) {
     Buffer::InstancePtr copy = std::make_unique<Buffer::OwnedImpl>(buffer);
+    stats_.escaped_size_.recordValue(copy->length());
     return copy;
   }
 
-  // Add a new request and trigger DSA copy.
+  // Add a new request and trigger DML copy.
   Request request{handle, buffer};
   queue_.push_back(request);
   queue_size_ += worth_dsa;
@@ -55,8 +62,8 @@ Buffer::InstancePtr TapThreadLocal::addRequest(Network::IoHandle& handle,
 }
 
 void TapThreadLocal::process() {
-  // Submit DML operations.
-  ENVOY_LOG(debug, "DML process {} requests", queue_.size());
+  // Submit DSA operations.
+  ENVOY_LOG(debug, "DSA process {} requests", queue_.size());
   using Handler = dml::handler<dml::mem_copy_operation, std::allocator<std::uint8_t>>;
   std::vector<Buffer::InstancePtr> buffers;
   std::vector<Buffer::Reservation> reservations;
@@ -100,6 +107,7 @@ void TapThreadLocal::process() {
   // Perform CPU operations on small slices.
   for (const Operation& operation : cpu_operations) {
     memcpy(operation.dest_.mem_, operation.src_.mem_, operation.src_.len_); // NOLINT(safe-memcpy)
+    stats_.cpu_copy_size_.recordValue(operation.src_.len_);
   }
 
   // Wait DML operations to complete.
@@ -112,6 +120,9 @@ void TapThreadLocal::process() {
                 fmt::ptr(operation.src_.mem_), fmt::ptr(operation.dest_.mem_), operation.src_.len_,
                 static_cast<uint32_t>(result));
       memcpy(operation.dest_.mem_, operation.src_.mem_, operation.src_.len_); // NOLINT(safe-memcpy)
+      stats_.dml_copy_error_size_.recordValue(operation.src_.len_);
+    } else {
+      stats_.dml_copy_size_.recordValue(operation.src_.len_);
     }
   }
 
@@ -123,6 +134,7 @@ void TapThreadLocal::process() {
   }
 
   // Clean up the queue.
+  stats_.dml_pipeline_size_.recordValue(queue_.size());
   queue_.clear();
   queue_size_ = 0;
 }
