@@ -16,6 +16,7 @@ namespace Tap {
 
 #define ALL_TAP_STATS(HISTOGRAM)                                                                   \
   HISTOGRAM(escaped_size, Unspecified)                                                             \
+  HISTOGRAM(unaligned_size, Unspecified)                                                           \
   HISTOGRAM(cpu_copy_size, Unspecified)                                                            \
   HISTOGRAM(dml_pipeline_size, Unspecified)                                                        \
   HISTOGRAM(dml_copy_size, Unspecified)                                                            \

@@ -23,12 +23,28 @@ TapThreadLocal::TapThreadLocal(std::chrono::milliseconds poll_delay, Event::Disp
 
 Buffer::InstancePtr TapThreadLocal::addRequest(Network::IoHandle& handle,
                                                Buffer::Instance& buffer) {
+  if (buffer.length() == 0 || poll_delay_ == std::chrono::milliseconds(0)) {
+    Buffer::InstancePtr copy = std::make_unique<Buffer::OwnedImpl>(buffer);
+    return copy;
+  }
+
   // After activating write event on copy completion, pop the result.
   auto it = map_.find(handle.fdDoNotUse());
   if (it != map_.end()) {
     Buffer::InstancePtr ptr = std::move(it->second);
-    RELEASE_ASSERT(ptr->length() == buffer.length(),
-                   "buffer length changing behavior has not been implemented");
+    uint64_t copy_length = ptr->length();
+    uint64_t buffer_length = buffer.length();
+    if (copy_length < buffer_length) {
+      uint64_t current_length = 0;
+      for (const Buffer::RawSlice& slice : buffer.getRawSlices()) {
+        current_length += slice.len_;
+        if (current_length > copy_length) {
+          uint64_t size = std::min(current_length - copy_length, slice.len_);
+          ptr->add(reinterpret_cast<uint8_t*>(slice.mem_) + slice.len_ - size, size);
+        }
+      }
+      stats_.unaligned_size_.recordValue(buffer_length - copy_length);
+    }
     map_.erase(it);
     return ptr;
   }
@@ -40,7 +56,7 @@ Buffer::InstancePtr TapThreadLocal::addRequest(Network::IoHandle& handle,
       worth_dsa += 1;
     }
   }
-  if (!worth_dsa || poll_delay_ == std::chrono::milliseconds(0)) {
+  if (!worth_dsa) {
     Buffer::InstancePtr copy = std::make_unique<Buffer::OwnedImpl>(buffer);
     stats_.escaped_size_.recordValue(copy->length());
     return copy;
@@ -82,7 +98,7 @@ void TapThreadLocal::process() {
         dml::const_data_view src_view =
             dml::make_view(reinterpret_cast<const uint8_t*>(src.mem_), src.len_);
         dml::data_view dest_view = dml::make_view(dest.data(), src.len_);
-        Handler handler = dml::submit<dml::automatic>(dml::mem_copy, src_view, dest_view);
+        Handler handler = dml::submit<dml::hardware>(dml::mem_copy, src_view, dest_view);
         ASSERT(handler.valid());
         dml_handlers.push_back(std::move(handler));
         dml_operations.push_back(operation);
@@ -119,12 +135,14 @@ void TapThreadLocal::process() {
 
   // Add copy to the map and trigger callbacks.
   for (size_t i = 0; i < queue_.size(); i++) {
+    RELEASE_ASSERT(queue_[i].handle_.isOpen(),
+                   "callback on closed handle behavior is not implemented");
     map_[queue_[i].handle_.fdDoNotUse()] = std::move(buffers[i]);
     queue_[i].handle_.activateFileEvents(Event::FileReadyType::Write);
   }
 
   // Clean up the queue.
-  stats_.dml_pipeline_size_.recordValue(queue_.size());
+  stats_.dml_pipeline_size_.recordValue(queue_size_);
   queue_.clear();
   queue_size_ = 0;
 }
