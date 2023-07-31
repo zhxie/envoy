@@ -15,12 +15,12 @@ namespace TransportSockets {
 namespace Tap {
 
 #define ALL_TAP_STATS(HISTOGRAM)                                                                   \
-  HISTOGRAM(escaped_size, Unspecified)                                                             \
-  HISTOGRAM(unaligned_size, Unspecified)                                                           \
-  HISTOGRAM(cpu_copy_size, Unspecified)                                                            \
+  HISTOGRAM(escaped_size, Bytes)                                                                   \
+  HISTOGRAM(unaligned_size, Bytes)                                                                 \
+  HISTOGRAM(cpu_copy_size, Bytes)                                                                  \
   HISTOGRAM(dml_pipeline_size, Unspecified)                                                        \
-  HISTOGRAM(dml_copy_size, Unspecified)                                                            \
-  HISTOGRAM(dml_copy_error_size, Unspecified)
+  HISTOGRAM(dml_copy_size, Bytes)                                                                  \
+  HISTOGRAM(dml_copy_error_size, Bytes)
 
 struct TapStats {
   ALL_TAP_STATS(GENERATE_HISTOGRAM_STRUCT)
