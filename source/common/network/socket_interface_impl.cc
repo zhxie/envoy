@@ -2,6 +2,7 @@
 
 #include "envoy/common/exception.h"
 #include "envoy/extensions/network/socket_interface/v3/default_socket_interface.pb.h"
+#include "envoy/extensions/network/socket_interface/v3/default_socket_interface.pb.validate.h"
 
 #include "source/common/api/os_sys_calls_impl.h"
 #include "source/common/common/assert.h"
@@ -11,6 +12,8 @@
 #include "source/common/network/win32_socket_handle_impl.h"
 
 #if defined(__linux__) && !defined(__ANDROID_API__)
+#include "source/common/io/io_uring_worker_factory_impl.h"
+#include "source/common/io/io_uring_impl.h"
 #include "source/common/network/io_uring_socket_handle_impl.h"
 #endif
 
@@ -23,6 +26,12 @@ namespace {
          io_uring_worker_factory->getIoUringWorker() != absl::nullopt;
 }
 } // namespace
+
+void DefaultSocketInterfaceExtension::onWorkerThreadInitialized() {
+  if (io_uring_worker_factory_ != nullptr) {
+    io_uring_worker_factory_->onWorkerThreadInitialized();
+  }
+}
 
 IoHandlePtr SocketInterfaceImpl::makePlatformSpecificSocket(
     int socket_fd, bool socket_v6only, absl::optional<int> domain,
@@ -43,8 +52,13 @@ IoHandlePtr SocketInterfaceImpl::makePlatformSpecificSocket(
 }
 
 IoHandlePtr SocketInterfaceImpl::makeSocket(int socket_fd, bool socket_v6only,
+                                            Socket::Type socket_type,
                                             absl::optional<int> domain) const {
-  return makePlatformSpecificSocket(socket_fd, socket_v6only, domain);
+  if (socket_type == Socket::Type::Datagram) {
+    return makePlatformSpecificSocket(socket_fd, socket_v6only, domain, nullptr);
+  }
+  return makePlatformSpecificSocket(socket_fd, socket_v6only, domain,
+                                    io_uring_worker_factory_.lock().get());
 }
 
 IoHandlePtr SocketInterfaceImpl::socket(Socket::Type socket_type, Address::Type addr_type,
@@ -56,6 +70,11 @@ IoHandlePtr SocketInterfaceImpl::socket(Socket::Type socket_type, Address::Type 
   int flags = 0;
 #else
   int flags = SOCK_NONBLOCK;
+
+  if (hasIoUringWorkerFactory(io_uring_worker_factory_.lock().get()) &&
+      socket_type == Socket::Type::Stream) {
+    flags = 0;
+  }
 
   if (options.mptcp_enabled_) {
     ASSERT(socket_type == Socket::Type::Stream);
@@ -99,7 +118,7 @@ IoHandlePtr SocketInterfaceImpl::socket(Socket::Type socket_type, Address::Type 
                      fmt::format("socket(2) failed, got error: {}", errorDetails(result.errno_)));
     }
   }
-  IoHandlePtr io_handle = makeSocket(result.return_value_, socket_v6only, domain);
+  IoHandlePtr io_handle = makeSocket(result.return_value_, socket_v6only, socket_type, domain);
 
 #if defined(__APPLE__) || defined(WIN32)
   // Cannot set SOCK_NONBLOCK as a ::socket flag.
@@ -152,10 +171,30 @@ bool SocketInterfaceImpl::ipFamilySupported(int domain) {
   return SOCKET_VALID(result.return_value_);
 }
 
-Server::BootstrapExtensionPtr
-SocketInterfaceImpl::createBootstrapExtension(const Protobuf::Message&,
-                                              Server::Configuration::ServerFactoryContext&) {
-  return std::make_unique<SocketInterfaceExtension>(*this);
+Server::BootstrapExtensionPtr SocketInterfaceImpl::createBootstrapExtension(
+    [[maybe_unused]] const Protobuf::Message& config,
+    [[maybe_unused]] Server::Configuration::ServerFactoryContext& context) {
+#ifdef __linux__
+  const auto& message = MessageUtil::downcastAndValidate<
+      const envoy::extensions::network::socket_interface::v3::DefaultSocketInterface&>(
+      config, context.messageValidationVisitor());
+  if (message.enable_io_uring() && Io::isIoUringSupported()) {
+    std::shared_ptr<Io::IoUringWorkerFactoryImpl> io_uring_worker_factory =
+        std::make_shared<Io::IoUringWorkerFactoryImpl>(
+            PROTOBUF_GET_WRAPPED_OR_DEFAULT(message, io_uring_size, 1000),
+            message.enable_io_uring_submission_queue_polling(),
+            PROTOBUF_GET_WRAPPED_OR_DEFAULT(message, io_uring_read_buffer_size, 8192),
+            PROTOBUF_GET_WRAPPED_OR_DEFAULT(message, io_uring_write_timeout_ms, 1000),
+            context.threadLocal());
+    io_uring_worker_factory_ = io_uring_worker_factory;
+
+    return std::make_unique<DefaultSocketInterfaceExtension>(*this, io_uring_worker_factory);
+  } else {
+    return std::make_unique<DefaultSocketInterfaceExtension>(*this, nullptr);
+  }
+#else
+  return std::make_unique<DefaultSocketInterfaceExtension>(*this, nullptr);
+#endif
 }
 
 ProtobufTypes::MessagePtr SocketInterfaceImpl::createEmptyConfigProto() {
