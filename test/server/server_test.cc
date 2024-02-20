@@ -1463,6 +1463,7 @@ TEST_P(ServerInstanceImplTest, WithBootstrapExtensions) {
               // call to cluster manager, to make sure it is not nullptr.
               ctx.clusterManager().clusters();
             }));
+            EXPECT_CALL(*mock_extension, onWorkerThreadInitialized());
             return mock_extension;
           }));
 
