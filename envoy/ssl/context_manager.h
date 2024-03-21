@@ -7,6 +7,7 @@
 #include "envoy/ssl/context.h"
 #include "envoy/ssl/context_config.h"
 #include "envoy/ssl/private_key/private_key.h"
+#include "envoy/ssl/shared_key/shared_key.h"
 #include "envoy/stats/scope.h"
 
 namespace Envoy {
@@ -48,6 +49,12 @@ public:
    * context manager.
    */
   virtual PrivateKeyMethodManager& privateKeyMethodManager() PURE;
+
+  /**
+   * Access the shared key operations manager, which is part of SSL
+   * context manager.
+   */
+  virtual SharedKeyMethodManager& sharedKeyMethodManager() PURE;
 
   /**
    * @return the number of seconds until the next OCSP response being managed will

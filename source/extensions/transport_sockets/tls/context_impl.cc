@@ -292,6 +292,26 @@ ContextImpl::ContextImpl(Stats::Scope& scope, const Envoy::Ssl::ContextConfig& c
         ctx.loadPrivateKey(tls_certificate.privateKey(), tls_certificate.privateKeyPath(),
                            tls_certificate.password());
       }
+
+      Envoy::Ssl::SharedKeyMethodProviderSharedPtr shared_key_method_provider =
+          config.sharedKeyMethod();
+      if (shared_key_method_provider) {
+        ctx.shared_key_method_provider_ = shared_key_method_provider;
+        // The provider has a reference to the shared key method for the context lifetime.
+        Ssl::BoringSslSharedKeyMethodSharedPtr shared_key_method =
+            shared_key_method_provider->getBoringSslSharedKeyMethod();
+        if (shared_key_method == nullptr) {
+          throwEnvoyExceptionOrPanic(
+              fmt::format("Failed to get BoringSSL shared key method from provider"));
+        }
+#ifdef BORINGSSL_FIPS
+        if (!ctx.shared_key_method_provider_->checkFips()) {
+          throwEnvoyExceptionOrPanic(
+              fmt::format("Shared key method doesn't support FIPS mode with current parameters"));
+        }
+#endif
+        SSL_CTX_set_shared_key_method(ctx.ssl_ctx_.get(), shared_key_method.get());
+      }
     }
   }
 
@@ -589,6 +609,19 @@ std::vector<Ssl::PrivateKeyMethodProviderSharedPtr> ContextImpl::getPrivateKeyMe
   for (auto& tls_context : tls_contexts_) {
     Envoy::Ssl::PrivateKeyMethodProviderSharedPtr provider =
         tls_context.getPrivateKeyMethodProvider();
+    if (provider) {
+      providers.push_back(provider);
+    }
+  }
+  return providers;
+}
+
+std::vector<Ssl::SharedKeyMethodProviderSharedPtr> ContextImpl::getSharedKeyMethodProviders() {
+  std::vector<Envoy::Ssl::SharedKeyMethodProviderSharedPtr> providers;
+
+  for (auto& tls_context : tls_contexts_) {
+    Envoy::Ssl::SharedKeyMethodProviderSharedPtr provider =
+        tls_context.getSharedKeyMethodProvider();
     if (provider) {
       providers.push_back(provider);
     }

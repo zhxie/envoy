@@ -67,9 +67,12 @@ void SslSocket::setTransportSocketCallbacks(Network::TransportSocketCallbacks& c
   callbacks_ = &callbacks;
 
   // Associate this SSL connection with all the certificates (with their potentially different
-  // private key methods).
+  // private and shared key methods).
   for (auto const& provider : ctx_->getPrivateKeyMethodProviders()) {
     provider->registerPrivateKeyMethod(rawSsl(), *this, callbacks_->connection().dispatcher());
+  }
+  for (auto const& provider : ctx_->getSharedKeyMethodProviders()) {
+    provider->registerSharedKeyMethod(rawSsl(), *this, callbacks_->connection().dispatcher());
   }
 
   // Use custom BIO that reads from/writes to IoHandle
@@ -166,6 +169,8 @@ Network::IoResult SslSocket::doRead(Buffer::Instance& read_buffer) {
 }
 
 void SslSocket::onPrivateKeyMethodComplete() { resumeHandshake(); }
+
+void SslSocket::onSharedKeyMethodComplete() { resumeHandshake(); }
 
 void SslSocket::resumeHandshake() {
   ASSERT(callbacks_ != nullptr && callbacks_->connection().dispatcher().isThreadSafe());
@@ -342,9 +347,12 @@ void SslSocket::shutdownBasic() {
 }
 
 void SslSocket::closeSocket(Network::ConnectionEvent) {
-  // Unregister the SSL connection object from private key method providers.
+  // Unregister the SSL connection object from private and shared key method providers.
   for (auto const& provider : ctx_->getPrivateKeyMethodProviders()) {
     provider->unregisterPrivateKeyMethod(rawSsl());
+  }
+  for (auto const& provider : ctx_->getSharedKeyMethodProviders()) {
+    provider->unregisterSharedKeyMethod(rawSsl());
   }
 
   // Attempt to send a shutdown before closing the socket. It's possible this won't go out if

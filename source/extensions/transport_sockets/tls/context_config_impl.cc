@@ -232,6 +232,21 @@ ContextConfigImpl::ContextConfigImpl(
     }
   }
 
+  if (config.has_shared_key_provider()) {
+    shared_key_method_ =
+        factory_context.sslContextManager().sharedKeyMethodManager().createSharedKeyMethodProvider(
+            config.shared_key_provider(), factory_context);
+    if (shared_key_method_ == nullptr ||
+        (!shared_key_method_->isAvailable() && !config.shared_key_provider().fallback())) {
+      throwEnvoyExceptionOrPanic(fmt::format("Failed to load shared key provider: {}",
+                                             config.shared_key_provider().provider_name()));
+    }
+
+    if (!shared_key_method_->isAvailable()) {
+      shared_key_method_ = nullptr;
+    }
+  }
+
   HandshakerFactoryContextImpl handshaker_factory_context(api_, options_, alpn_protocols_,
                                                           singleton_manager_);
   Ssl::HandshakerFactory* handshaker_factory;

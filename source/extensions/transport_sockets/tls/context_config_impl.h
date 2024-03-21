@@ -48,6 +48,9 @@ public:
   AccessLog::AccessLogManager& accessLogManager() const override {
     return factory_context_.serverFactoryContext().accessLogManager();
   }
+  Envoy::Ssl::SharedKeyMethodProviderSharedPtr sharedKeyMethod() const override {
+    return shared_key_method_;
+  }
 
   bool isReady() const override {
     const bool tls_is_ready =
@@ -113,6 +116,7 @@ private:
   const std::string tls_keylog_path_;
   std::unique_ptr<Network::Address::IpList> tls_keylog_local_;
   std::unique_ptr<Network::Address::IpList> tls_keylog_remote_;
+  Envoy::Ssl::SharedKeyMethodProviderSharedPtr shared_key_method_;
 };
 
 class ClientContextConfigImpl : public ContextConfigImpl, public Envoy::Ssl::ClientContextConfig {

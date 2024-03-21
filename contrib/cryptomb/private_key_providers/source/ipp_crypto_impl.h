@@ -4,6 +4,7 @@
 #include "crypto_mb/cpu_features.h"
 #include "crypto_mb/ec_nistp256.h"
 #include "crypto_mb/rsa.h"
+#include "crypto_mb/x25519.h"
 
 namespace Envoy {
 namespace Extensions {
@@ -33,6 +34,14 @@ public:
                               const BIGNUM* const e_pa[8], const BIGNUM* const n_pa[8],
                               int expected_rsa_bitsize) override {
     return ::mbx_rsa_public_ssl_mb8(from_pa, to_pa, e_pa, n_pa, expected_rsa_bitsize);
+  }
+  uint32_t mbxX25519PublicKeyMb8(uint8_t* const pa_public_key[8],
+                                 const uint8_t* const pa_private_key[8]) override {
+    return ::mbx_x25519_public_key_mb8(pa_public_key, pa_private_key);
+  }
+  uint32_t mbxX25519Mb8(uint8_t* const pa_shared_key[8], const uint8_t* const pa_private_key[8],
+                        const uint8_t* const pa_public_key[8]) override {
+    return ::mbx_x25519_mb8(pa_shared_key, pa_private_key, pa_public_key);
   }
   bool mbxGetSts(uint32_t status, unsigned req_num) override {
     if (MBX_GET_STS(status, req_num) == MBX_STATUS_OK) {

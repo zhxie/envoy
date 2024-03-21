@@ -44,6 +44,12 @@ CONTRIB_EXTENSIONS = {
     "envoy.tls.key_providers.qat":                              "//contrib/qat/private_key_providers/source:config",
 
     #
+    # Shared key providers
+    #
+
+    "envoy.tls.shared_key_providers.cryptomb":                  "//contrib/cryptomb/shared_key_providers/source:config",
+
+    #
     # Socket interface extensions
     #
 

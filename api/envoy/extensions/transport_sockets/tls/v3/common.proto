@@ -185,6 +185,32 @@ message PrivateKeyProvider {
   bool fallback = 4;
 }
 
+// BoringSSL shared key method configuration. The shared key methods are used for external
+// (potentially asynchronous) signing and decryption operations. Some use cases for shared key
+// methods would be TPM support and TLS acceleration.
+message SharedKeyProvider {
+  option (udpa.annotations.versioning).previous_message_type =
+      "envoy.api.v2.auth.SharedKeyProvider";
+
+  reserved 2;
+
+  reserved "config";
+
+  // Shared key method provider name. The name must match a
+  // supported shared key method provider type.
+  string provider_name = 1 [(validate.rules).string = {min_len: 1}];
+
+  // Shared key method provider specific configuration.
+  oneof config_type {
+    google.protobuf.Any typed_config = 3 [(udpa.annotations.sensitive) = true];
+  }
+
+  // If the shared key provider isn't available (eg. the required hardware capability doesn't existed),
+  // Envoy will fallback to the BoringSSL default implementation when the ``fallback`` is true.
+  // The default value is ``false``.
+  bool fallback = 4;
+}
+
 // [#next-free-field: 9]
 message TlsCertificate {
   option (udpa.annotations.versioning).previous_message_type = "envoy.api.v2.auth.TlsCertificate";

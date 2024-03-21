@@ -158,7 +158,7 @@ message TlsKeyLog {
 }
 
 // TLS context shared by both client and server TLS contexts.
-// [#next-free-field: 16]
+// [#next-free-field: 17]
 message CommonTlsContext {
   option (udpa.annotations.versioning).previous_message_type = "envoy.api.v2.auth.CommonTlsContext";
 
@@ -331,4 +331,7 @@ message CommonTlsContext {
 
   // TLS key log configuration
   TlsKeyLog key_log = 15;
+
+  // BoringSSL shared key method provider.
+  SharedKeyProvider shared_key_provider = 16;
 }

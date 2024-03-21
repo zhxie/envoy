@@ -1,0 +1,718 @@
+diff --git a/src/include/openssl/base.h b/src/include/openssl/base.h
+index 9430c8ef3..b77588afe 100644
+--- a/src/include/openssl/base.h
++++ b/src/include/openssl/base.h
+@@ -237,6 +237,7 @@ enum ssl_select_cert_result_t BORINGSSL_ENUM_INT;
+ enum ssl_select_cert_result_t BORINGSSL_ENUM_INT;
+ enum ssl_ticket_aead_result_t BORINGSSL_ENUM_INT;
+ enum ssl_verify_result_t BORINGSSL_ENUM_INT;
++enum ssl_shared_key_result_t BORINGSSL_ENUM_INT;
+ #else
+ #define BORINGSSL_ENUM_INT
+ #endif
+@@ -381,6 +382,7 @@ typedef struct x509_st X509;
+ typedef struct x509_store_ctx_st X509_STORE_CTX;
+ typedef struct x509_store_st X509_STORE;
+ typedef struct x509_trust_st X509_TRUST;
++typedef struct ssl_shared_key_method_st SSL_SHARED_KEY_METHOD;
+ 
+ typedef void *OPENSSL_BLOCK;
+ 
+diff --git a/src/include/openssl/ssl.h b/src/include/openssl/ssl.h
+index 995d05e8c..c0958b75c 100644
+--- a/src/include/openssl/ssl.h
++++ b/src/include/openssl/ssl.h
+@@ -588,6 +588,13 @@ OPENSSL_EXPORT int SSL_get_error(const SSL *ssl, int ret_code);
+ // |SSL_request_handshake_hints|.
+ #define SSL_ERROR_HANDSHAKE_HINTS_READY 20
+ 
++// SSL_ERROR_WANT_SHARED_KEY_OPERATION indicates the operation failed because a
++// shared key operation was unfinished. The caller may retry the operation when
++// the shared key operation is complete.
++//
++// See also |SSL_set_shared_key_method| and |SSL_CTX_set_shared_key_method|.
++#define SSL_ERROR_WANT_SHARED_KEY_OPERATION 21
++
+ // SSL_error_description returns a string representation of |err|, where |err|
+ // is one of the |SSL_ERROR_*| constants returned by |SSL_get_error|, or NULL
+ // if the value is unrecognized.
+@@ -4607,6 +4614,57 @@ OPENSSL_EXPORT int SSL_used_hello_retry_request(const SSL *ssl);
+ // https://bugs.openjdk.java.net/browse/JDK-8213202
+ OPENSSL_EXPORT void SSL_set_jdk11_workaround(SSL *ssl, int enable);
+ 
++// Custom shared keys.
++
++enum ssl_shared_key_result_t BORINGSSL_ENUM_INT {
++  ssl_shared_key_success,
++  ssl_shared_key_retry,
++  ssl_shared_key_failure,
++};
++
++// ssl_shared_key_method_st (aka |SSL_SHARED_KEY_METHOD|) describes shared key
++// hooks. This is used to off-load computing operations to a custom,
++// potentially asynchronous, backend.
++struct ssl_shared_key_method_st {
++  // compute computes the shared key from peer key |peer_key| in using the
++  // specified group |group|. On success, it returns |ssl_shared_key_success|.
++  // On failure, it returns |ssl_shared_key_failure|. If the operation has not
++  // completed, it returns |ssl_shared_key_retry|. |compute| should arrange for
++  // the high-level operation on |ssl| to be retried when the operation is
++  // completed. This will result in a call to |complete|.
++  //
++  // |group| is one of the |SSL_GROUP_*| values, as defined in TLS 1.3.
++  //
++  // It is an error to call |group| while another shared key operation is in
++  // progress on |ssl|.
++  enum ssl_shared_key_result_t (*compute)(SSL *ssl, uint16_t group_id,
++                                          const uint8_t *peer_key,
++                                          size_t peer_key_len);
++
++  // complete completes a pending operation. If the operation has completed, it
++  // returns |ssl_shared_key_success| and set the ciphertext to |ciphertext| and
++  // secret to |secret|. Otherwise, it returns |ssl_shared_key_failure| on
++  // failure and |ssl_shared_key_retry| if the operation is still in progress.
++  //
++  // |complete| may be called arbitrarily many times before completion, but it
++  // is an error to call |complete| if there is no pending operation in progress
++  // on |ssl|.
++  enum ssl_shared_key_result_t (*complete)(SSL *ssl, uint8_t **ciphertext,
++                                           size_t *ciphertext_len,
++                                           uint8_t **secret,
++                                           size_t *secret_len);
++};
++
++// SSL_set_shared_key_method configures a custom shared key on |ssl|.
++// |key_method| must remain valid for the lifetime of |ssl|.
++OPENSSL_EXPORT void SSL_set_shared_key_method(
++    SSL *ssl, const SSL_SHARED_KEY_METHOD *key_method);
++
++// SSL_CTX_set_shared_key_method configures a custom shared key on |ctx|.
++// |key_method| must remain valid for the lifetime of |ctx|.
++OPENSSL_EXPORT void SSL_CTX_set_shared_key_method(
++    SSL_CTX *ctx, const SSL_SHARED_KEY_METHOD *key_method);
++
+ 
+ // Deprecated functions.
+ 
+@@ -5829,6 +5887,7 @@ BSSL_NAMESPACE_END
+ #define SSL_R_ECH_REJECTED 319
+ #define SSL_R_INVALID_OUTER_EXTENSION 320
+ #define SSL_R_INCONSISTENT_ECH_NEGOTIATION 321
++#define SSL_R_SHARED_KEY_OPERATION_FAILED 322
+ #define SSL_R_SSLV3_ALERT_CLOSE_NOTIFY 1000
+ #define SSL_R_SSLV3_ALERT_UNEXPECTED_MESSAGE 1010
+ #define SSL_R_SSLV3_ALERT_BAD_RECORD_MAC 1020
+diff --git a/src/ssl/handshake.cc b/src/ssl/handshake.cc
+index 8d5a23872..e8f6e9df5 100644
+--- a/src/ssl/handshake.cc
++++ b/src/ssl/handshake.cc
+@@ -730,6 +730,11 @@ int ssl_run_handshake(SSL_HANDSHAKE *hs, bool *out_early_return) {
+         ssl->s3->rwstate = SSL_ERROR_HANDSHAKE_HINTS_READY;
+         return -1;
+ 
++      case ssl_hs_shared_key_operation:
++        ssl->s3->rwstate = SSL_ERROR_WANT_SHARED_KEY_OPERATION;
++        hs->wait = ssl_hs_ok;
++        return -1;
++
+       case ssl_hs_ok:
+         break;
+     }
+diff --git a/src/ssl/internal.h b/src/ssl/internal.h
+index fa35073fa..5b9b3e4dc 100644
+--- a/src/ssl/internal.h
++++ b/src/ssl/internal.h
+@@ -1644,6 +1644,7 @@ enum ssl_hs_wait_t {
+   ssl_hs_read_change_cipher_spec,
+   ssl_hs_certificate_verify,
+   ssl_hs_hints_ready,
++  ssl_hs_shared_key_operation,
+ };
+ 
+ enum ssl_grease_index_t {
+@@ -2074,6 +2075,10 @@ struct SSL_HANDSHAKE {
+   // handshake.
+   bool channel_id_negotiated : 1;
+ 
++  // pending_shared_key_op is true if there is a pending shared key operation in
++  // progress.
++  bool pending_shared_key_op = false;
++
+   // client_version is the value sent or received in the ClientHello version.
+   uint16_t client_version = 0;
+ 
+@@ -3710,6 +3715,8 @@ struct ssl_ctx_st {
+   // accepted from the peer in decreasing order of preference.
+   bssl::Array<uint16_t> verify_sigalgs;
+ 
++  const SSL_SHARED_KEY_METHOD *shared_key_method = nullptr;
++
+   // retain_only_sha256_of_client_certs is true if we should compute the SHA256
+   // hash of the peer's certificate and then discard it to save memory and
+   // session space. Only effective on the server side.
+@@ -3843,6 +3850,8 @@ struct ssl_st {
+   // renegotiate_mode controls how peer renegotiation attempts are handled.
+   ssl_renegotiate_mode_t renegotiate_mode = ssl_renegotiate_never;
+ 
++  const SSL_SHARED_KEY_METHOD *shared_key_method = nullptr;
++
+   // server is true iff the this SSL* is the server half. Note: before the SSL*
+   // is initialized by either SSL_set_accept_state or SSL_set_connect_state,
+   // the side is not determined. In this state, server is always false.
+diff --git a/src/ssl/ssl_key_share.cc b/src/ssl/ssl_key_share.cc
+index 694bec11d..030c6c3ec 100644
+--- a/src/ssl/ssl_key_share.cc
++++ b/src/ssl/ssl_key_share.cc
+@@ -369,3 +369,16 @@ size_t SSL_get_all_group_names(const char **out, size_t max_out) {
+   return GetAllNames(out, max_out, Span<const char *>(), &NamedGroup::name,
+                      MakeConstSpan(kNamedGroups));
+ }
++
++void SSL_set_shared_key_method(SSL *ssl,
++                               const SSL_SHARED_KEY_METHOD *key_method) {
++  if (!ssl->config) {
++    return;
++  }
++  ssl->shared_key_method = key_method;
++}
++
++void SSL_CTX_set_shared_key_method(SSL_CTX *ctx,
++                                   const SSL_SHARED_KEY_METHOD *key_method) {
++  ctx->shared_key_method = key_method;
++}
+diff --git a/src/ssl/ssl_lib.cc b/src/ssl/ssl_lib.cc
+index 5a2ac2a8f..93d2b6855 100644
+--- a/src/ssl/ssl_lib.cc
++++ b/src/ssl/ssl_lib.cc
+@@ -686,6 +686,7 @@ SSL *SSL_new(SSL_CTX *ctx) {
+   ssl->config->ocsp_stapling_enabled = ctx->ocsp_stapling_enabled;
+   ssl->config->handoff = ctx->handoff;
+   ssl->quic_method = ctx->quic_method;
++  ssl->shared_key_method = ctx->shared_key_method;
+ 
+   if (!ssl->method->ssl_new(ssl.get()) ||
+       !ssl->ctx->x509_method->ssl_new(ssl->s3->hs.get())) {
+@@ -1354,6 +1355,7 @@ int SSL_get_error(const SSL *ssl, int ret_code) {
+     case SSL_ERROR_WANT_CERTIFICATE_VERIFY:
+     case SSL_ERROR_WANT_RENEGOTIATE:
+     case SSL_ERROR_HANDSHAKE_HINTS_READY:
++    case SSL_ERROR_WANT_SHARED_KEY_OPERATION:
+       return ssl->s3->rwstate;
+ 
+     case SSL_ERROR_WANT_READ: {
+@@ -1441,6 +1443,8 @@ const char *SSL_error_description(int err) {
+       return "WANT_RENEGOTIATE";
+     case SSL_ERROR_HANDSHAKE_HINTS_READY:
+       return "HANDSHAKE_HINTS_READY";
++    case SSL_ERROR_WANT_SHARED_KEY_OPERATION:
++      return "WANT_SHARED_KEY_OPERATION";
+     default:
+       return nullptr;
+   }
+diff --git a/src/ssl/tls13_server.cc b/src/ssl/tls13_server.cc
+index 9d26f4e00..b1cdbb320 100644
+--- a/src/ssl/tls13_server.cc
++++ b/src/ssl/tls13_server.cc
+@@ -42,8 +42,8 @@ static const uint8_t kZeroes[EVP_MAX_MD_SIZE] = {0};
+ // See RFC 8446, section 8.3.
+ static const int32_t kMaxTicketAgeSkewSeconds = 60;
+ 
+-static bool resolve_ecdhe_secret(SSL_HANDSHAKE *hs,
+-                                 const SSL_CLIENT_HELLO *client_hello) {
++static enum ssl_shared_key_result_t resolve_ecdhe_secret(
++    SSL_HANDSHAKE *hs, const SSL_CLIENT_HELLO *client_hello) {
+   SSL *const ssl = hs->ssl;
+   const uint16_t group_id = hs->new_session->group_id;
+ 
+@@ -53,24 +53,62 @@ static bool resolve_ecdhe_secret(SSL_HANDSHAKE *hs,
+   if (!ssl_ext_key_share_parse_clienthello(hs, &found_key_share, &peer_key,
+                                            &alert, client_hello)) {
+     ssl_send_alert(ssl, SSL3_AL_FATAL, alert);
+-    return false;
++    return ssl_shared_key_failure;
+   }
+ 
+   if (!found_key_share) {
+     ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_ILLEGAL_PARAMETER);
+     OPENSSL_PUT_ERROR(SSL, SSL_R_WRONG_CURVE);
+-    return false;
++    return ssl_shared_key_failure;
+   }
+ 
+   Array<uint8_t> secret;
+   SSL_HANDSHAKE_HINTS *const hints = hs->hints.get();
++  const SSL_SHARED_KEY_METHOD *key_method = ssl->shared_key_method;
+   if (hints && !hs->hints_requested && hints->key_share_group_id == group_id &&
+       !hints->key_share_secret.empty()) {
+     // Copy the key_share secret from hints.
+     if (!hs->key_share_ciphertext.CopyFrom(hints->key_share_ciphertext) ||
+         !secret.CopyFrom(hints->key_share_secret)) {
+       ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_INTERNAL_ERROR);
+-      return false;
++      return ssl_shared_key_failure;
++    }
++  } else if (key_method != NULL) {
++    enum ssl_shared_key_result_t ret;
++    if (hs->pending_shared_key_op) {
++      uint8_t *ciphertext_out, *secret_out;
++      size_t ciphertext_len_out = 0, secret_len_out = 0;
++      ret = key_method->complete(ssl, &ciphertext_out, &ciphertext_len_out,
++                                 &secret_out, &secret_len_out);
++      if (ret == ssl_shared_key_success) {
++        if (!hs->key_share_ciphertext.Init(ciphertext_len_out)) {
++          ret = ssl_shared_key_failure;
++        } else {
++          OPENSSL_memcpy(hs->key_share_ciphertext.data(), ciphertext_out,
++                         ciphertext_len_out);
++          secret.Init(secret_len_out);
++          OPENSSL_memcpy(secret.data(), secret_out, secret_len_out);
++          if (hints && hs->hints_requested) {
++            hints->key_share_group_id = group_id;
++            if (!hints->key_share_ciphertext.CopyFrom(
++                    hs->key_share_ciphertext) ||
++                !hints->key_share_secret.CopyFrom(secret)) {
++              ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_INTERNAL_ERROR);
++              return ssl_shared_key_failure;
++            }
++          }
++        }
++      }
++    } else {
++      ret =
++          key_method->compute(ssl, group_id, peer_key.data(), peer_key.size());
++    }
++    if (ret == ssl_shared_key_failure) {
++      OPENSSL_PUT_ERROR(SSL, SSL_R_SHARED_KEY_OPERATION_FAILED);
++    }
++    hs->pending_shared_key_op = ret == ssl_shared_key_retry;
++    if (ret != ssl_shared_key_success) {
++      return ret;
+     }
+   } else {
+     ScopedCBB ciphertext;
+@@ -80,19 +118,24 @@ static bool resolve_ecdhe_secret(SSL_HANDSHAKE *hs,
+         !key_share->Encap(ciphertext.get(), &secret, &alert, peer_key) ||
+         !CBBFinishArray(ciphertext.get(), &hs->key_share_ciphertext)) {
+       ssl_send_alert(ssl, SSL3_AL_FATAL, alert);
+-      return false;
++      return ssl_shared_key_failure;
+     }
+     if (hints && hs->hints_requested) {
+       hints->key_share_group_id = group_id;
+       if (!hints->key_share_ciphertext.CopyFrom(hs->key_share_ciphertext) ||
+           !hints->key_share_secret.CopyFrom(secret)) {
+         ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_INTERNAL_ERROR);
+-        return false;
++        return ssl_shared_key_failure;
+       }
+     }
+   }
+ 
+-  return tls13_advance_key_schedule(hs, secret);
++  bool ret = tls13_advance_key_schedule(hs, secret);
++  if (ret) {
++    return ssl_shared_key_success;
++  } else {
++    return ssl_shared_key_failure;
++  }
+ }
+ 
+ static int ssl_ext_supported_versions_add_serverhello(SSL_HANDSHAKE *hs,
+@@ -100,8 +143,7 @@ static int ssl_ext_supported_versions_add_serverhello(SSL_HANDSHAKE *hs,
+   CBB contents;
+   if (!CBB_add_u16(out, TLSEXT_TYPE_supported_versions) ||
+       !CBB_add_u16_length_prefixed(out, &contents) ||
+-      !CBB_add_u16(&contents, hs->ssl->version) ||
+-      !CBB_flush(out)) {
++      !CBB_add_u16(&contents, hs->ssl->version) || !CBB_flush(out)) {
+     return 0;
+   }
+ 
+@@ -125,8 +167,8 @@ static const SSL_CIPHER *choose_tls13_cipher(
+ 
+ static bool add_new_session_tickets(SSL_HANDSHAKE *hs, bool *out_sent_tickets) {
+   SSL *const ssl = hs->ssl;
+-  if (// If the client doesn't accept resumption with PSK_DHE_KE, don't send a
+-      // session ticket.
++  if (  // If the client doesn't accept resumption with PSK_DHE_KE, don't send a
++        // session ticket.
+       !hs->accept_psk_mode ||
+       // We only implement stateless resumption in TLS 1.3, so skip sending
+       // tickets if disabled.
+@@ -371,176 +413,183 @@ static enum ssl_hs_wait_t do_select_session(SSL_HANDSHAKE *hs) {
+     return ssl_hs_error;
+   }
+ 
+-  uint8_t alert = SSL_AD_DECODE_ERROR;
+-  UniquePtr<SSL_SESSION> session;
+-  bool offered_ticket = false;
+-  switch (select_session(hs, &alert, &session, &ssl->s3->ticket_age_skew,
+-                         &offered_ticket, msg, &client_hello)) {
+-    case ssl_ticket_aead_ignore_ticket:
+-      assert(!session);
+-      if (!ssl_get_new_session(hs)) {
+-        ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_INTERNAL_ERROR);
+-        return ssl_hs_error;
+-      }
+-      break;
++  if (!hs->pending_shared_key_op) {
++    uint8_t alert = SSL_AD_DECODE_ERROR;
++    UniquePtr<SSL_SESSION> session;
++    bool offered_ticket = false;
++    switch (select_session(hs, &alert, &session, &ssl->s3->ticket_age_skew,
++                           &offered_ticket, msg, &client_hello)) {
++      case ssl_ticket_aead_ignore_ticket:
++        assert(!session);
++        if (!ssl_get_new_session(hs)) {
++          ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_INTERNAL_ERROR);
++          return ssl_hs_error;
++        }
++        break;
+ 
+-    case ssl_ticket_aead_success:
+-      // Carry over authentication information from the previous handshake into
+-      // a fresh session.
+-      hs->new_session =
+-          SSL_SESSION_dup(session.get(), SSL_SESSION_DUP_AUTH_ONLY);
+-      if (hs->new_session == nullptr) {
+-        ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_INTERNAL_ERROR);
+-        return ssl_hs_error;
+-      }
++      case ssl_ticket_aead_success:
++        // Carry over authentication information from the previous handshake
++        // into a fresh session.
++        hs->new_session =
++            SSL_SESSION_dup(session.get(), SSL_SESSION_DUP_AUTH_ONLY);
++        if (hs->new_session == nullptr) {
++          ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_INTERNAL_ERROR);
++          return ssl_hs_error;
++        }
++
++        ssl->s3->session_reused = true;
++        hs->can_release_private_key = true;
++
++        // Resumption incorporates fresh key material, so refresh the timeout.
++        ssl_session_renew_timeout(ssl, hs->new_session.get(),
++                                  ssl->session_ctx->session_psk_dhe_timeout);
++        break;
+ 
+-      ssl->s3->session_reused = true;
+-      hs->can_release_private_key = true;
++      case ssl_ticket_aead_error:
++        ssl_send_alert(ssl, SSL3_AL_FATAL, alert);
++        return ssl_hs_error;
+ 
+-      // Resumption incorporates fresh key material, so refresh the timeout.
+-      ssl_session_renew_timeout(ssl, hs->new_session.get(),
+-                                ssl->session_ctx->session_psk_dhe_timeout);
+-      break;
++      case ssl_ticket_aead_retry:
++        hs->tls13_state = state13_select_session;
++        return ssl_hs_pending_ticket;
++    }
+ 
+-    case ssl_ticket_aead_error:
++    // Negotiate ALPS now, after ALPN is negotiated and |hs->new_session| is
++    // initialized.
++    if (!ssl_negotiate_alps(hs, &alert, &client_hello)) {
+       ssl_send_alert(ssl, SSL3_AL_FATAL, alert);
+       return ssl_hs_error;
++    }
+ 
+-    case ssl_ticket_aead_retry:
+-      hs->tls13_state = state13_select_session;
+-      return ssl_hs_pending_ticket;
+-  }
+-
+-  // Negotiate ALPS now, after ALPN is negotiated and |hs->new_session| is
+-  // initialized.
+-  if (!ssl_negotiate_alps(hs, &alert, &client_hello)) {
+-    ssl_send_alert(ssl, SSL3_AL_FATAL, alert);
+-    return ssl_hs_error;
+-  }
+-
+-  // Record connection properties in the new session.
+-  hs->new_session->cipher = hs->new_cipher;
+-  if (!tls1_get_shared_group(hs, &hs->new_session->group_id)) {
+-    OPENSSL_PUT_ERROR(SSL, SSL_R_NO_SHARED_GROUP);
+-    ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_HANDSHAKE_FAILURE);
+-    return ssl_hs_error;
+-  }
+-
+-  // Determine if we need HelloRetryRequest.
+-  bool found_key_share;
+-  if (!ssl_ext_key_share_parse_clienthello(hs, &found_key_share,
+-                                           /*out_key_share=*/nullptr, &alert,
+-                                           &client_hello)) {
+-    ssl_send_alert(ssl, SSL3_AL_FATAL, alert);
+-    return ssl_hs_error;
+-  }
+-
+-  // Determine if we're negotiating 0-RTT.
+-  if (!ssl->enable_early_data) {
+-    ssl->s3->early_data_reason = ssl_early_data_disabled;
+-  } else if (!offered_ticket) {
+-    ssl->s3->early_data_reason = ssl_early_data_no_session_offered;
+-  } else if (!session) {
+-    ssl->s3->early_data_reason = ssl_early_data_session_not_resumed;
+-  } else if (session->ticket_max_early_data == 0) {
+-    ssl->s3->early_data_reason = ssl_early_data_unsupported_for_session;
+-  } else if (!hs->early_data_offered) {
+-    ssl->s3->early_data_reason = ssl_early_data_peer_declined;
+-  } else if (hs->channel_id_negotiated) {
+-    // Channel ID is incompatible with 0-RTT.
+-    ssl->s3->early_data_reason = ssl_early_data_channel_id;
+-  } else if (MakeConstSpan(ssl->s3->alpn_selected) != session->early_alpn) {
+-    // The negotiated ALPN must match the one in the ticket.
+-    ssl->s3->early_data_reason = ssl_early_data_alpn_mismatch;
+-  } else if (hs->new_session->has_application_settings !=
+-                 session->has_application_settings ||
+-             MakeConstSpan(hs->new_session->local_application_settings) !=
+-                 session->local_application_settings) {
+-    ssl->s3->early_data_reason = ssl_early_data_alps_mismatch;
+-  } else if (ssl->s3->ticket_age_skew < -kMaxTicketAgeSkewSeconds ||
+-             kMaxTicketAgeSkewSeconds < ssl->s3->ticket_age_skew) {
+-    ssl->s3->early_data_reason = ssl_early_data_ticket_age_skew;
+-  } else if (!quic_ticket_compatible(session.get(), hs->config)) {
+-    ssl->s3->early_data_reason = ssl_early_data_quic_parameter_mismatch;
+-  } else if (!found_key_share) {
+-    ssl->s3->early_data_reason = ssl_early_data_hello_retry_request;
+-  } else {
+-    // |ssl_session_is_resumable| forbids cross-cipher resumptions even if the
+-    // PRF hashes match.
+-    assert(hs->new_cipher == session->cipher);
++    // Record connection properties in the new session.
++    hs->new_session->cipher = hs->new_cipher;
++    if (!tls1_get_shared_group(hs, &hs->new_session->group_id)) {
++      OPENSSL_PUT_ERROR(SSL, SSL_R_NO_SHARED_GROUP);
++      ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_HANDSHAKE_FAILURE);
++      return ssl_hs_error;
++    }
+ 
+-    ssl->s3->early_data_reason = ssl_early_data_accepted;
+-    ssl->s3->early_data_accepted = true;
+-  }
++    // Determine if we need HelloRetryRequest.
++    bool found_key_share;
++    if (!ssl_ext_key_share_parse_clienthello(hs, &found_key_share,
++                                             /*out_key_share=*/nullptr, &alert,
++                                             &client_hello)) {
++      ssl_send_alert(ssl, SSL3_AL_FATAL, alert);
++      return ssl_hs_error;
++    }
+ 
+-  // Store the ALPN and ALPS values in the session for 0-RTT. Note the peer
+-  // applications settings are not generally known until client
+-  // EncryptedExtensions.
+-  if (!hs->new_session->early_alpn.CopyFrom(ssl->s3->alpn_selected)) {
+-    ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_INTERNAL_ERROR);
+-    return ssl_hs_error;
+-  }
++    // Determine if we're negotiating 0-RTT.
++    if (!ssl->enable_early_data) {
++      ssl->s3->early_data_reason = ssl_early_data_disabled;
++    } else if (!offered_ticket) {
++      ssl->s3->early_data_reason = ssl_early_data_no_session_offered;
++    } else if (!session) {
++      ssl->s3->early_data_reason = ssl_early_data_session_not_resumed;
++    } else if (session->ticket_max_early_data == 0) {
++      ssl->s3->early_data_reason = ssl_early_data_unsupported_for_session;
++    } else if (!hs->early_data_offered) {
++      ssl->s3->early_data_reason = ssl_early_data_peer_declined;
++    } else if (hs->channel_id_negotiated) {
++      // Channel ID is incompatible with 0-RTT.
++      ssl->s3->early_data_reason = ssl_early_data_channel_id;
++    } else if (MakeConstSpan(ssl->s3->alpn_selected) != session->early_alpn) {
++      // The negotiated ALPN must match the one in the ticket.
++      ssl->s3->early_data_reason = ssl_early_data_alpn_mismatch;
++    } else if (hs->new_session->has_application_settings !=
++                   session->has_application_settings ||
++               MakeConstSpan(hs->new_session->local_application_settings) !=
++                   session->local_application_settings) {
++      ssl->s3->early_data_reason = ssl_early_data_alps_mismatch;
++    } else if (ssl->s3->ticket_age_skew < -kMaxTicketAgeSkewSeconds ||
++               kMaxTicketAgeSkewSeconds < ssl->s3->ticket_age_skew) {
++      ssl->s3->early_data_reason = ssl_early_data_ticket_age_skew;
++    } else if (!quic_ticket_compatible(session.get(), hs->config)) {
++      ssl->s3->early_data_reason = ssl_early_data_quic_parameter_mismatch;
++    } else if (!found_key_share) {
++      ssl->s3->early_data_reason = ssl_early_data_hello_retry_request;
++    } else {
++      // |ssl_session_is_resumable| forbids cross-cipher resumptions even if the
++      // PRF hashes match.
++      assert(hs->new_cipher == session->cipher);
++
++      ssl->s3->early_data_reason = ssl_early_data_accepted;
++      ssl->s3->early_data_accepted = true;
++    }
+ 
+-  // The peer applications settings are usually received later, in
+-  // EncryptedExtensions. But, in 0-RTT handshakes, we carry over the
+-  // values from |session|. Do this now, before |session| is discarded.
+-  if (ssl->s3->early_data_accepted &&
+-      hs->new_session->has_application_settings &&
+-      !hs->new_session->peer_application_settings.CopyFrom(
+-          session->peer_application_settings)) {
+-    ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_INTERNAL_ERROR);
+-    return ssl_hs_error;
+-  }
++    // Store the ALPN and ALPS values in the session for 0-RTT. Note the peer
++    // applications settings are not generally known until client
++    // EncryptedExtensions.
++    if (!hs->new_session->early_alpn.CopyFrom(ssl->s3->alpn_selected)) {
++      ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_INTERNAL_ERROR);
++      return ssl_hs_error;
++    }
+ 
+-  // Copy the QUIC early data context to the session.
+-  if (ssl->enable_early_data && ssl->quic_method) {
+-    if (!hs->new_session->quic_early_data_context.CopyFrom(
+-            hs->config->quic_early_data_context)) {
++    // The peer applications settings are usually received later, in
++    // EncryptedExtensions. But, in 0-RTT handshakes, we carry over the
++    // values from |session|. Do this now, before |session| is discarded.
++    if (ssl->s3->early_data_accepted &&
++        hs->new_session->has_application_settings &&
++        !hs->new_session->peer_application_settings.CopyFrom(
++            session->peer_application_settings)) {
+       ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_INTERNAL_ERROR);
+       return ssl_hs_error;
+     }
+-  }
+ 
+-  if (ssl->ctx->dos_protection_cb != NULL &&
+-      ssl->ctx->dos_protection_cb(&client_hello) == 0) {
+-    // Connection rejected for DOS reasons.
+-    OPENSSL_PUT_ERROR(SSL, SSL_R_CONNECTION_REJECTED);
+-    ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_INTERNAL_ERROR);
+-    return ssl_hs_error;
+-  }
++    // Copy the QUIC early data context to the session.
++    if (ssl->enable_early_data && ssl->quic_method) {
++      if (!hs->new_session->quic_early_data_context.CopyFrom(
++              hs->config->quic_early_data_context)) {
++        ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_INTERNAL_ERROR);
++        return ssl_hs_error;
++      }
++    }
+ 
+-  size_t hash_len = EVP_MD_size(
+-      ssl_get_handshake_digest(ssl_protocol_version(ssl), hs->new_cipher));
++    if (ssl->ctx->dos_protection_cb != NULL &&
++        ssl->ctx->dos_protection_cb(&client_hello) == 0) {
++      // Connection rejected for DOS reasons.
++      OPENSSL_PUT_ERROR(SSL, SSL_R_CONNECTION_REJECTED);
++      ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_INTERNAL_ERROR);
++      return ssl_hs_error;
++    }
+ 
+-  // Set up the key schedule and incorporate the PSK into the running secret.
+-  if (!tls13_init_key_schedule(
+-          hs, ssl->s3->session_reused
+-                  ? MakeConstSpan(hs->new_session->secret,
+-                                  hs->new_session->secret_length)
+-                  : MakeConstSpan(kZeroes, hash_len)) ||
+-      !ssl_hash_message(hs, msg)) {
+-    return ssl_hs_error;
+-  }
++    size_t hash_len = EVP_MD_size(
++        ssl_get_handshake_digest(ssl_protocol_version(ssl), hs->new_cipher));
+ 
+-  if (ssl->s3->early_data_accepted) {
+-    if (!tls13_derive_early_secret(hs)) {
++    // Set up the key schedule and incorporate the PSK into the running secret.
++    if (!tls13_init_key_schedule(
++            hs, ssl->s3->session_reused
++                    ? MakeConstSpan(hs->new_session->secret,
++                                    hs->new_session->secret_length)
++                    : MakeConstSpan(kZeroes, hash_len)) ||
++        !ssl_hash_message(hs, msg)) {
+       return ssl_hs_error;
+     }
+-  } else if (hs->early_data_offered) {
+-    ssl->s3->skip_early_data = true;
+-  }
+ 
+-  if (!found_key_share) {
+-    ssl->method->next_message(ssl);
+-    if (!hs->transcript.UpdateForHelloRetryRequest()) {
+-      return ssl_hs_error;
++    if (ssl->s3->early_data_accepted) {
++      if (!tls13_derive_early_secret(hs)) {
++        return ssl_hs_error;
++      }
++    } else if (hs->early_data_offered) {
++      ssl->s3->skip_early_data = true;
++    }
++
++    if (!found_key_share) {
++      ssl->method->next_message(ssl);
++      if (!hs->transcript.UpdateForHelloRetryRequest()) {
++        return ssl_hs_error;
++      }
++      hs->tls13_state = state13_send_hello_retry_request;
++      return ssl_hs_ok;
+     }
+-    hs->tls13_state = state13_send_hello_retry_request;
+-    return ssl_hs_ok;
+   }
+ 
+-  if (!resolve_ecdhe_secret(hs, &client_hello)) {
+-    return ssl_hs_error;
++  switch (resolve_ecdhe_secret(hs, &client_hello)) {
++    case ssl_shared_key_success:
++      break;
++    case ssl_shared_key_failure:
++      return ssl_hs_error;
++    case ssl_shared_key_retry:
++      return ssl_hs_shared_key_operation;
+   }
+ 
+   ssl->method->next_message(ssl);
+@@ -713,8 +762,13 @@ static enum ssl_hs_wait_t do_read_second_client_hello(SSL_HANDSHAKE *hs) {
+     }
+   }
+ 
+-  if (!resolve_ecdhe_secret(hs, &client_hello)) {
+-    return ssl_hs_error;
++  switch (resolve_ecdhe_secret(hs, &client_hello)) {
++    case ssl_shared_key_success:
++      break;
++    case ssl_shared_key_failure:
++      return ssl_hs_error;
++    case ssl_shared_key_retry:
++      return ssl_hs_shared_key_operation;
+   }
+ 
+   if (!ssl_hash_message(hs, msg)) {
+@@ -925,8 +979,8 @@ static enum ssl_hs_wait_t do_send_half_rtt_ticket(SSL_HANDSHAKE *hs) {
+     // the wire sooner and also avoids triggering a write on |SSL_read| when
+     // processing the client Finished. This requires computing the client
+     // Finished early. See RFC 8446, section 4.6.1.
+-    static const uint8_t kEndOfEarlyData[4] = {SSL3_MT_END_OF_EARLY_DATA, 0,
+-                                               0, 0};
++    static const uint8_t kEndOfEarlyData[4] = {SSL3_MT_END_OF_EARLY_DATA, 0, 0,
++                                               0};
+     if (ssl->quic_method == nullptr &&
+         !hs->transcript.Update(kEndOfEarlyData)) {
+       OPENSSL_PUT_ERROR(SSL, ERR_R_INTERNAL_ERROR);
+@@ -1161,8 +1215,7 @@ static enum ssl_hs_wait_t do_read_channel_id(SSL_HANDSHAKE *hs) {
+     return ssl_hs_read_message;
+   }
+   if (!ssl_check_message_type(ssl, msg, SSL3_MT_CHANNEL_ID) ||
+-      !tls1_verify_channel_id(hs, msg) ||
+-      !ssl_hash_message(hs, msg)) {
++      !tls1_verify_channel_id(hs, msg) || !ssl_hash_message(hs, msg)) {
+     return ssl_hs_error;
+   }
+ 
+@@ -1189,8 +1242,7 @@ static enum ssl_hs_wait_t do_read_client_finished(SSL_HANDSHAKE *hs) {
+   }
+ 
+   if (!ssl->s3->early_data_accepted) {
+-    if (!ssl_hash_message(hs, msg) ||
+-        !tls13_derive_resumption_secret(hs)) {
++    if (!ssl_hash_message(hs, msg) || !tls13_derive_resumption_secret(hs)) {
+       return ssl_hs_error;
+     }
+ 

@@ -8,6 +8,7 @@
 #include "envoy/secret/secret_callbacks.h"
 #include "envoy/ssl/handshaker.h"
 #include "envoy/ssl/private_key/private_key_callbacks.h"
+#include "envoy/ssl/shared_key/shared_key_callbacks.h"
 #include "envoy/ssl/ssl_socket_extended_info.h"
 #include "envoy/ssl/ssl_socket_state.h"
 #include "envoy/stats/scope.h"
@@ -45,6 +46,7 @@ enum class InitialState { Client, Server };
 
 class SslSocket : public Network::TransportSocket,
                   public Envoy::Ssl::PrivateKeyConnectionCallbacks,
+                  public Envoy::Ssl::SharedKeyConnectionCallbacks,
                   public Ssl::HandshakeCallbacks,
                   protected Logger::Loggable<Logger::Id::connection> {
 public:
@@ -66,6 +68,8 @@ public:
   void configureInitialCongestionWindow(uint64_t, std::chrono::microseconds) override {}
   // Ssl::PrivateKeyConnectionCallbacks
   void onPrivateKeyMethodComplete() override;
+  // Ssl::SharedKeyConnectionCallbacks
+  void onSharedKeyMethodComplete() override;
   // Ssl::HandshakeCallbacks
   Network::Connection& connection() const override;
   void onSuccess(SSL* ssl) override;
