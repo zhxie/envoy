@@ -41,7 +41,7 @@ option (udpa.annotations.file_status).package_version_status = ACTIVE;
 // <config_overview_bootstrap>` for more detail.
 
 // Bootstrap :ref:`configuration overview <config_overview_bootstrap>`.
-// [#next-free-field: 41]
+// [#next-free-field: 42]
 message Bootstrap {
   option (udpa.annotations.versioning).previous_message_type =
       "envoy.config.bootstrap.v2.Bootstrap";
@@ -411,6 +411,10 @@ message Bootstrap {
 
   // Optional gRPC async manager config.
   GrpcAsyncClientManagerConfig grpc_async_client_manager_config = 40;
+
+  // Optional TLS shared key provider.
+  // [#extension-category: envoy.tls.shared_key_providers]
+  core.v3.TypedExtensionConfig shared_key_provider = 41;
 }
 
 // Administration interface :ref:`operations documentation

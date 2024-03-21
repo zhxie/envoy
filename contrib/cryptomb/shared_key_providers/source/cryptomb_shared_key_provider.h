@@ -2,15 +2,13 @@
 
 #include "envoy/api/api.h"
 #include "envoy/event/dispatcher.h"
-#include "envoy/ssl/shared_key/shared_key.h"
-#include "envoy/ssl/shared_key/shared_key_config.h"
+#include "envoy/ssl/shared_key_provider.h"
 #include "envoy/thread_local/thread_local.h"
 
 #include "source/common/common/logger.h"
 
 #include "contrib/cryptomb/private_key_providers/source/ipp_crypto.h"
 #include "contrib/cryptomb/shared_key_providers/source/cryptomb_stats.h"
-#include "contrib/envoy/extensions/shared_key_providers/cryptomb/v3alpha/cryptomb.pb.h"
 
 namespace Envoy {
 namespace Extensions {
@@ -139,11 +137,9 @@ private:
 class CryptoMbSharedKeyMethodProvider : public virtual Ssl::SharedKeyMethodProvider,
                                         public Logger::Loggable<Logger::Id::connection> {
 public:
-  CryptoMbSharedKeyMethodProvider(
-      const envoy::extensions::shared_key_providers::cryptomb::v3alpha::
-          CryptoMbSharedKeyMethodConfig& config,
-      Server::Configuration::TransportSocketFactoryContext& shared_key_provider_context,
-      PrivateKeyMethodProvider::CryptoMb::IppCryptoSharedPtr ipp);
+  CryptoMbSharedKeyMethodProvider(ThreadLocal::SlotAllocator& tls, Stats::Scope& stats_scope,
+                                  PrivateKeyMethodProvider::CryptoMb::IppCryptoSharedPtr ipp,
+                                  std::chrono::milliseconds poll_delay);
 
   // Ssl::SharedKeyMethodProvider
   void registerSharedKeyMethod(SSL* ssl, Ssl::SharedKeyConnectionCallbacks& cb,
@@ -166,7 +162,6 @@ private:
   };
 
   Ssl::BoringSslSharedKeyMethodSharedPtr method_{};
-  Api::Api& api_;
 
   ThreadLocal::TypedSlotPtr<ThreadLocalData> tls_;
 

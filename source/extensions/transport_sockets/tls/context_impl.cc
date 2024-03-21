@@ -293,8 +293,8 @@ ContextImpl::ContextImpl(Stats::Scope& scope, const Envoy::Ssl::ContextConfig& c
                            tls_certificate.password());
       }
 
-      Envoy::Ssl::SharedKeyMethodProviderSharedPtr shared_key_method_provider =
-          config.sharedKeyMethod();
+      Envoy::Ssl::SharedKeyMethodProvider* shared_key_method_provider =
+          SharedKeyMethodProviderSingleton::getExisting();
       if (shared_key_method_provider) {
         ctx.shared_key_method_provider_ = shared_key_method_provider;
         // The provider has a reference to the shared key method for the context lifetime.
@@ -616,12 +616,11 @@ std::vector<Ssl::PrivateKeyMethodProviderSharedPtr> ContextImpl::getPrivateKeyMe
   return providers;
 }
 
-std::vector<Ssl::SharedKeyMethodProviderSharedPtr> ContextImpl::getSharedKeyMethodProviders() {
-  std::vector<Envoy::Ssl::SharedKeyMethodProviderSharedPtr> providers;
+std::vector<Ssl::SharedKeyMethodProvider*> ContextImpl::getSharedKeyMethodProviders() {
+  std::vector<Ssl::SharedKeyMethodProvider*> providers;
 
   for (auto& tls_context : tls_contexts_) {
-    Envoy::Ssl::SharedKeyMethodProviderSharedPtr provider =
-        tls_context.getSharedKeyMethodProvider();
+    Envoy::Ssl::SharedKeyMethodProvider* provider = tls_context.getSharedKeyMethodProvider();
     if (provider) {
       providers.push_back(provider);
     }

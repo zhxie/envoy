@@ -249,22 +249,15 @@ void CryptoMbSharedKeyMethodProvider::unregisterSharedKeyMethod(SSL* ssl) {
 
 // The CryptoMbSharedKeyMethodProvider is created on config.
 CryptoMbSharedKeyMethodProvider::CryptoMbSharedKeyMethodProvider(
-    const envoy::extensions::shared_key_providers::cryptomb::v3alpha::CryptoMbSharedKeyMethodConfig&
-        conf,
-    Server::Configuration::TransportSocketFactoryContext& factory_context,
-    PrivateKeyMethodProvider::CryptoMb::IppCryptoSharedPtr ipp)
-    : api_(factory_context.serverFactoryContext().api()),
-      tls_(ThreadLocal::TypedSlot<ThreadLocalData>::makeUnique(
-          factory_context.serverFactoryContext().threadLocal())),
-      stats_(generateCryptoMbStats("cryptomb", factory_context.statsScope())) {
+    ThreadLocal::SlotAllocator& tls, Stats::Scope& stats_scope,
+    PrivateKeyMethodProvider::CryptoMb::IppCryptoSharedPtr ipp,
+    std::chrono::milliseconds poll_delay)
+    : tls_(ThreadLocal::TypedSlot<ThreadLocalData>::makeUnique(tls)),
+      stats_(generateCryptoMbStats("cryptomb", stats_scope)) {
 
   if (!ipp->mbxIsCryptoMbApplicable(0)) {
-    ENVOY_LOG(warn, "Multi-buffer CPU instructions not available.");
-    return;
+    throw EnvoyException("Multi-buffer CPU instructions not available.");
   }
-
-  std::chrono::milliseconds poll_delay =
-      std::chrono::milliseconds(PROTOBUF_GET_MS_OR_DEFAULT(conf, poll_delay, 200));
 
   method_ = std::make_shared<SSL_SHARED_KEY_METHOD>();
   method_->compute = sharedKeyCompute;

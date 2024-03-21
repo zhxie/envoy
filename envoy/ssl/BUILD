@@ -34,7 +34,6 @@ envoy_cc_library(
         ":certificate_validation_context_config_interface",
         ":handshaker_interface",
         ":tls_certificate_config_interface",
-        "//envoy/ssl/shared_key:shared_key_interface",
         "//source/common/network:cidr_range_interface",
     ],
 )
@@ -91,5 +90,15 @@ envoy_cc_library(
         "//envoy/protobuf:message_validator_interface",
         "//envoy/server:options_interface",
         "//envoy/singleton:manager_interface",
+    ],
+)
+
+envoy_cc_library(
+    name = "shared_key_provider_interface",
+    hdrs = ["shared_key_provider.h"],
+    external_deps = ["ssl"],
+    deps = [
+        "//envoy/event:dispatcher_interface",
+        "//envoy/server:factory_context_interface",
     ],
 )

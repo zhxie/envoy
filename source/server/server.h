@@ -19,6 +19,7 @@
 #include "envoy/server/tracer_config.h"
 #include "envoy/server/transport_socket_config.h"
 #include "envoy/ssl/context_manager.h"
+#include "envoy/ssl/shared_key_provider.h"
 #include "envoy/stats/stats_macros.h"
 #include "envoy/stats/timespan.h"
 #include "envoy/tracing/tracer.h"
@@ -414,6 +415,7 @@ private:
   ServerFactoryContextImpl server_contexts_;
   bool enable_reuse_port_default_{false};
   Regex::EnginePtr regex_engine_;
+  Ssl::SharedKeyMethodProviderSharedPtr shared_key_method_provider_;
 
   bool stats_flush_in_progress_ : 1;
 

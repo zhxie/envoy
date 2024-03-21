@@ -54,6 +54,7 @@
 #include "source/server/listener_hooks.h"
 #include "source/server/listener_manager_factory.h"
 #include "source/server/regex_engine.h"
+#include "source/server/shared_key_provider.h"
 #include "source/server/ssl_context_manager.h"
 #include "source/server/utils.h"
 
@@ -723,6 +724,11 @@ void InstanceBase::initializeOrThrow(Network::Address::InstanceConstSharedPtr lo
   if (initial_config.admin().address()) {
     admin_->addListenerToHandler(handler_.get());
   }
+
+  // Initialize the shared key provider and inject to singleton before initializing the SSL context
+  // manager.
+  shared_key_method_provider_ = createSharedKeyMethodProvider(
+      bootstrap_, messageValidationContext().staticValidationVisitor(), serverFactoryContext());
 
   // Once we have runtime we can initialize the SSL context manager.
   ssl_context_manager_ = createContextManager("ssl_context_manager", time_source_);

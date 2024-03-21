@@ -71,7 +71,7 @@ void SslSocket::setTransportSocketCallbacks(Network::TransportSocketCallbacks& c
   for (auto const& provider : ctx_->getPrivateKeyMethodProviders()) {
     provider->registerPrivateKeyMethod(rawSsl(), *this, callbacks_->connection().dispatcher());
   }
-  for (auto const& provider : ctx_->getSharedKeyMethodProviders()) {
+  for (auto const provider : ctx_->getSharedKeyMethodProviders()) {
     provider->registerSharedKeyMethod(rawSsl(), *this, callbacks_->connection().dispatcher());
   }
 

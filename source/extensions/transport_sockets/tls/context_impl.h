@@ -13,7 +13,7 @@
 #include "envoy/ssl/context.h"
 #include "envoy/ssl/context_config.h"
 #include "envoy/ssl/private_key/private_key.h"
-#include "envoy/ssl/shared_key/shared_key.h"
+#include "envoy/ssl/shared_key_provider.h"
 #include "envoy/ssl/ssl_socket_extended_info.h"
 #include "envoy/stats/scope.h"
 #include "envoy/stats/stats_macros.h"
@@ -38,6 +38,8 @@ namespace Extensions {
 namespace TransportSockets {
 namespace Tls {
 
+using SharedKeyMethodProviderSingleton = InjectableSingleton<Ssl::SharedKeyMethodProvider>;
+
 struct TlsContext {
   // Each certificate specified for the context has its own SSL_CTX. `SSL_CTXs`
   // are identical with the exception of certificate material, and can be
@@ -50,14 +52,14 @@ struct TlsContext {
   bool is_ecdsa_{};
   bool is_must_staple_{};
   Ssl::PrivateKeyMethodProviderSharedPtr private_key_method_provider_{};
-  Ssl::SharedKeyMethodProviderSharedPtr shared_key_method_provider_{};
+  Ssl::SharedKeyMethodProvider* shared_key_method_provider_{};
 
   std::string getCertChainFileName() const { return cert_chain_file_path_; };
   bool isCipherEnabled(uint16_t cipher_id, uint16_t client_version);
   Envoy::Ssl::PrivateKeyMethodProviderSharedPtr getPrivateKeyMethodProvider() {
     return private_key_method_provider_;
   }
-  Envoy::Ssl::SharedKeyMethodProviderSharedPtr getSharedKeyMethodProvider() {
+  Envoy::Ssl::SharedKeyMethodProvider* getSharedKeyMethodProvider() {
     return shared_key_method_provider_;
   }
   void loadCertificateChain(const std::string& data, const std::string& data_path);
@@ -95,7 +97,7 @@ public:
   absl::optional<uint64_t> secondsUntilFirstOcspResponseExpires() const override;
 
   std::vector<Ssl::PrivateKeyMethodProviderSharedPtr> getPrivateKeyMethodProviders();
-  std::vector<Ssl::SharedKeyMethodProviderSharedPtr> getSharedKeyMethodProviders();
+  std::vector<Ssl::SharedKeyMethodProvider*> getSharedKeyMethodProviders();
 
   // Validate cert asynchronously for a QUIC connection.
   ValidationResults customVerifyCertChainForQuic(

@@ -4,21 +4,28 @@
 #include <string>
 
 #include "envoy/common/pure.h"
+#include "envoy/config/typed_config.h"
 #include "envoy/event/dispatcher.h"
-#include "envoy/extensions/transport_sockets/tls/v3/cert.pb.h"
-#include "envoy/ssl/shared_key/shared_key_callbacks.h"
+#include "envoy/server/factory_context.h"
 
 #include "openssl/ssl.h"
 
 namespace Envoy {
-namespace Server {
-namespace Configuration {
-// Prevent a dependency loop with the forward declaration.
-class TransportSocketFactoryContext;
-} // namespace Configuration
-} // namespace Server
 
 namespace Ssl {
+
+class SharedKeyConnectionCallbacks {
+public:
+  virtual ~SharedKeyConnectionCallbacks() = default;
+
+  /**
+   * Callback function which is called when the asynchronous shared key
+   * operation has been completed (with either success or failure). The
+   * provider will communicate the success status when SSL_do_handshake()
+   * is called the next time.
+   */
+  virtual void onSharedKeyMethodComplete() PURE;
+};
 
 #ifdef OPENSSL_IS_BORINGSSL
 using BoringSslSharedKeyMethodSharedPtr = std::shared_ptr<SSL_SHARED_KEY_METHOD>;
@@ -69,26 +76,16 @@ public:
 
 using SharedKeyMethodProviderSharedPtr = std::shared_ptr<SharedKeyMethodProvider>;
 
-/**
- * A manager for finding correct user-provided functions for handling BoringSSL shared key
- * operations.
- */
-class SharedKeyMethodManager {
+class SharedKeyMethodProviderFactory : public Config::TypedFactory {
 public:
-  virtual ~SharedKeyMethodManager() = default;
-
   /**
-   * Finds and returns a shared key operations provider for BoringSSL.
-   *
-   * @param config a protobuf message object containing a SharedKeyProvider message.
-   * @param factory_context context that provides components for creating and
-   * initializing connections using asynchronous shared key operations.
-   * @return SharedKeyMethodProvider the shared key operations provider, or nullptr if
-   * no provider can be used with the context configuration.
+   * Creates an shared key method provider from the provided config.
    */
   virtual SharedKeyMethodProviderSharedPtr createSharedKeyMethodProvider(
-      const envoy::extensions::transport_sockets::tls::v3::SharedKeyProvider& config,
-      Envoy::Server::Configuration::TransportSocketFactoryContext& factory_context) PURE;
+      const Protobuf::Message& config,
+      Server::Configuration::ServerFactoryContext& server_factory_context) PURE;
+
+  std::string category() const override { return "envoy.tls.shared_key_providers"; }
 };
 
 } // namespace Ssl

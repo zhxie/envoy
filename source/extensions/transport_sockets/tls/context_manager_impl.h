@@ -7,11 +7,9 @@
 #include "envoy/common/time.h"
 #include "envoy/ssl/context_manager.h"
 #include "envoy/ssl/private_key/private_key.h"
-#include "envoy/ssl/shared_key/shared_key.h"
 #include "envoy/stats/scope.h"
 
 #include "source/extensions/transport_sockets/tls/private_key/private_key_manager_impl.h"
-#include "source/extensions/transport_sockets/tls/shared_key/shared_key_manager_impl.h"
 
 namespace Envoy {
 namespace Extensions {
@@ -43,16 +41,12 @@ public:
   Ssl::PrivateKeyMethodManager& privateKeyMethodManager() override {
     return private_key_method_manager_;
   };
-  Ssl::SharedKeyMethodManager& sharedKeyMethodManager() override {
-    return shared_key_method_manager_;
-  };
   void removeContext(const Envoy::Ssl::ContextSharedPtr& old_context) override;
 
 private:
   TimeSource& time_source_;
   absl::flat_hash_set<Envoy::Ssl::ContextSharedPtr> contexts_;
   PrivateKeyMethodManagerImpl private_key_method_manager_{};
-  SharedKeyMethodManagerImpl shared_key_method_manager_{};
 };
 
 } // namespace Tls

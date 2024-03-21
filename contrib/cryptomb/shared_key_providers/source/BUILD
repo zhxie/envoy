@@ -28,12 +28,10 @@ envoy_cc_library(
         "//envoy/registry",
         "//envoy/server:transport_socket_config_interface",
         "//envoy/singleton:manager_interface",
-        "//envoy/ssl/shared_key:shared_key_config_interface",
-        "//envoy/ssl/shared_key:shared_key_interface",
+        "//envoy/ssl:shared_key_provider_interface",
         "//source/common/common:logger_lib",
         "//source/common/common:thread_lib",
         "//source/common/config:datasource_lib",
-        "@envoy_api//contrib/envoy/extensions/shared_key_providers/cryptomb/v3alpha:pkg_cc_proto",
     ],
 )
 
@@ -65,8 +63,7 @@ envoy_cc_contrib_extension(
     }),
     deps = [
         "//envoy/registry",
-        "//envoy/ssl/shared_key:shared_key_config_interface",
-        "//envoy/ssl/shared_key:shared_key_interface",
+        "//envoy/ssl:shared_key_provider_interface",
         "//source/common/common:logger_lib",
         "//source/common/config:utility_lib",
         "//source/common/protobuf:utility_lib",

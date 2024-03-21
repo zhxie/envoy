@@ -8,7 +8,7 @@
 #include "envoy/secret/secret_callbacks.h"
 #include "envoy/ssl/handshaker.h"
 #include "envoy/ssl/private_key/private_key_callbacks.h"
-#include "envoy/ssl/shared_key/shared_key_callbacks.h"
+#include "envoy/ssl/shared_key_provider.h"
 #include "envoy/ssl/ssl_socket_extended_info.h"
 #include "envoy/ssl/ssl_socket_state.h"
 #include "envoy/stats/scope.h"

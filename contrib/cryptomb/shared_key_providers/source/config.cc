@@ -15,41 +15,33 @@
 #include "contrib/cryptomb/shared_key_providers/source/cryptomb_shared_key_provider.h"
 #endif
 
-#include "contrib/envoy/extensions/shared_key_providers/cryptomb/v3alpha/cryptomb.pb.h"
-#include "contrib/envoy/extensions/shared_key_providers/cryptomb/v3alpha/cryptomb.pb.validate.h"
-
 namespace Envoy {
 namespace Extensions {
 namespace SharedKeyMethodProvider {
 namespace CryptoMb {
 
-Ssl::SharedKeyMethodProviderSharedPtr
-CryptoMbSharedKeyMethodFactory::createSharedKeyMethodProviderInstance(
-    const envoy::extensions::transport_sockets::tls::v3::SharedKeyProvider& proto_config,
-    Server::Configuration::TransportSocketFactoryContext& shared_key_provider_context) {
-  ProtobufTypes::MessagePtr message = std::make_unique<
-      envoy::extensions::shared_key_providers::cryptomb::v3alpha::CryptoMbSharedKeyMethodConfig>();
-
-  Config::Utility::translateOpaqueConfig(proto_config.typed_config(),
-                                         ProtobufMessage::getNullValidationVisitor(), *message);
-  const envoy::extensions::shared_key_providers::cryptomb::v3alpha::CryptoMbSharedKeyMethodConfig
-      conf =
-          MessageUtil::downcastAndValidate<const envoy::extensions::shared_key_providers::cryptomb::
-                                               v3alpha::CryptoMbSharedKeyMethodConfig&>(
-              *message, shared_key_provider_context.messageValidationVisitor());
-  Ssl::SharedKeyMethodProviderSharedPtr provider = nullptr;
+Ssl::SharedKeyMethodProviderSharedPtr CryptoMbSharedKeyMethodFactory::createSharedKeyMethodProvider(
+    const Protobuf::Message& config,
+    Server::Configuration::ServerFactoryContext& server_factory_context) {
+  const auto cryptomb =
+      MessageUtil::downcastAndValidate<const envoy::extensions::shared_key_providers::cryptomb::
+                                           v3alpha::CryptoMbSharedKeyMethodConfig&>(
+          config, server_factory_context.messageValidationVisitor());
 #ifdef IPP_CRYPTO_DISABLED
   throw EnvoyException("X86_64 architecture is required for cryptomb provider.");
 #else
+  std::chrono::milliseconds poll_delay =
+      std::chrono::milliseconds(PROTOBUF_GET_MS_OR_DEFAULT(cryptomb, poll_delay, 200));
   PrivateKeyMethodProvider::CryptoMb::IppCryptoSharedPtr ipp =
       std::make_shared<PrivateKeyMethodProvider::CryptoMb::IppCryptoImpl>();
-  provider =
-      std::make_shared<CryptoMbSharedKeyMethodProvider>(conf, shared_key_provider_context, ipp);
-#endif
+  Ssl::SharedKeyMethodProviderSharedPtr provider =
+      std::make_shared<CryptoMbSharedKeyMethodProvider>(
+          server_factory_context.threadLocal(), server_factory_context.scope(), ipp, poll_delay);
   return provider;
+#endif
 }
 
-REGISTER_FACTORY(CryptoMbSharedKeyMethodFactory, Ssl::SharedKeyMethodProviderInstanceFactory);
+REGISTER_FACTORY(CryptoMbSharedKeyMethodFactory, Ssl::SharedKeyMethodProviderFactory);
 
 } // namespace CryptoMb
 } // namespace SharedKeyMethodProvider

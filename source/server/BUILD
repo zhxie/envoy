@@ -415,6 +415,7 @@ envoy_cc_library(
         ":listener_hooks_lib",
         ":listener_manager_factory_lib",
         ":regex_engine_lib",
+        ":shared_key_provider_lib",
         ":ssl_context_manager_lib",
         ":utils_lib",
         ":worker_lib",
@@ -564,5 +565,21 @@ envoy_cc_library(
     hdrs = ["generic_factory_context.h"],
     deps = [
         "//envoy/server:factory_context_interface",
+    ],
+)
+
+envoy_cc_library(
+    name = "shared_key_provider_lib",
+    srcs = [
+        "shared_key_provider.cc",
+    ],
+    hdrs = [
+        "shared_key_provider.h",
+    ],
+    deps = [
+        "//envoy/registry",
+        "//envoy/ssl:shared_key_provider_interface",
+        "//source/common/config:utility_lib",
+        "//source/extensions/transport_sockets/tls:context_lib",
     ],
 )

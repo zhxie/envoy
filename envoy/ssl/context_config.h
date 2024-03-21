@@ -9,7 +9,6 @@
 #include "envoy/common/pure.h"
 #include "envoy/ssl/certificate_validation_context_config.h"
 #include "envoy/ssl/handshaker.h"
-#include "envoy/ssl/shared_key/shared_key.h"
 #include "envoy/ssl/tls_certificate_config.h"
 
 #include "source/common/network/cidr_range.h"
@@ -118,11 +117,6 @@ public:
    * @return the access log manager object reference
    */
   virtual AccessLog::AccessLogManager& accessLogManager() const PURE;
-
-  /**
-   * @return shared key method provider.
-   */
-  virtual Envoy::Ssl::SharedKeyMethodProviderSharedPtr sharedKeyMethod() const PURE;
 };
 
 class ClientContextConfig : public virtual ContextConfig {
