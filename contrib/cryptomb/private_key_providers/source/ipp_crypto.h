@@ -32,6 +32,12 @@ public:
   virtual uint32_t mbxX25519Mb8(uint8_t* const pa_shared_key[8],
                                 const uint8_t* const pa_private_key[8],
                                 const uint8_t* const pa_public_key[8]) PURE;
+  virtual uint32_t mbxNistp256EcpublicKeySslMb8(BIGNUM* pa_public_x[8], BIGNUM* pa_public_y[8],
+                                                const BIGNUM* const pa_private_key[8]) PURE;
+  virtual uint32_t mbxNistp256EcdhSslMb8(uint8_t* pa_shared_key[8],
+                                         const BIGNUM* const pa_private_key[8],
+                                         const BIGNUM* const pa_public_x[8],
+                                         const BIGNUM* const pa_public_y[8]) PURE;
   virtual bool mbxGetSts(uint32_t status, unsigned req_num) PURE;
 };
 

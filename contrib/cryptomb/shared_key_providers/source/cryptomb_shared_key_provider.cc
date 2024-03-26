@@ -30,7 +30,7 @@ void CryptoMbContext::scheduleCallback(enum RequestStatus status) {
   schedulable_->scheduleCallbackNextIteration();
 }
 
-bool CryptoMbX25519Context::x25519Init(const uint8_t* peer_key) {
+bool CryptoMbX25519Context::init(const uint8_t* peer_key) {
   if (initialized_) {
     return false;
   }
@@ -46,6 +46,47 @@ bool CryptoMbX25519Context::x25519Init(const uint8_t* peer_key) {
   private_key_[0] |= ~248;
   private_key_[31] &= ~64;
   private_key_[31] |= ~127;
+
+  initialized_ = true;
+
+  return true;
+}
+
+bool CryptoMbP256Context::init(const uint8_t* peer_key) {
+  if (initialized_) {
+    return false;
+  }
+
+  ciphertext_ = std::make_unique<uint8_t[]>(65);
+  ciphertext_len_ = 65;
+  secret_ = std::make_unique<uint8_t[]>(32);
+  secret_len_ = 32;
+
+  peer_key_.reset(EC_POINT_new(EC_group_p256()));
+  if (!peer_key_ || !EC_POINT_oct2point(EC_group_p256(), peer_key_.get(), peer_key, 65, nullptr)) {
+    return false;
+  }
+  peer_x_.reset(BN_new());
+  peer_y_.reset(BN_new());
+  if (!peer_x_ || !peer_y_) {
+    return false;
+  }
+  if (!EC_POINT_get_affine_coordinates_GFp(EC_group_p256(), peer_key_.get(), peer_x_.get(),
+                                           peer_y_.get(), nullptr)) {
+    return false;
+  }
+
+  private_key_.reset(BN_new());
+  if (!private_key_ ||
+      !BN_rand_range_ex(private_key_.get(), 1, EC_GROUP_get0_order(EC_group_p256()))) {
+    return false;
+  }
+
+  public_x_.reset(BN_new());
+  public_y_.reset(BN_new());
+  if (!public_x_ || !public_y_) {
+    return false;
+  }
 
   initialized_ = true;
 
@@ -69,11 +110,26 @@ ssl_shared_key_result_t sharedKeyComputeInternal(CryptoMbSharedKeyConnection* op
     CryptoMbX25519ContextSharedPtr mb_ctx =
         std::make_shared<CryptoMbX25519Context>(ops->dispatcher_, ops->cb_);
 
-    if (!mb_ctx->x25519Init(peer_key)) {
+    if (!mb_ctx->init(peer_key)) {
       return ssl_shared_key_failure;
     }
 
     ops->x25519AddToQueue(mb_ctx);
+    return ssl_shared_key_retry;
+  }
+  case SSL_GROUP_SECP256R1: {
+    if (peer_key_len != 65 || peer_key[0] != POINT_CONVERSION_UNCOMPRESSED) {
+      return ssl_shared_key_failure;
+    }
+
+    CryptoMbP256ContextSharedPtr mb_ctx =
+        std::make_shared<CryptoMbP256Context>(ops->dispatcher_, ops->cb_);
+
+    if (!mb_ctx->init(peer_key)) {
+      return ssl_shared_key_failure;
+    }
+
+    ops->p256AddToQueue(mb_ctx);
     return ssl_shared_key_retry;
   }
   default:
@@ -102,6 +158,33 @@ ssl_shared_key_result_t sharedKeyCompleteInternal(CryptoMbSharedKeyConnection* o
   // thread.
   if (ops->mb_ctx_->getStatus() == RequestStatus::Retry) {
     return ssl_shared_key_retry;
+  }
+
+  // If this point is reached, the MB processing must be complete.
+
+  // See if the operation failed.
+  if (ops->mb_ctx_->getStatus() != RequestStatus::Success) {
+    ops->logWarnMsg("shared key operation failed.");
+    return ssl_shared_key_failure;
+  }
+
+  switch (ops->mb_ctx_->groupId()) {
+  case SSL_GROUP_SECP256R1: {
+    CryptoMbP256ContextSharedPtr mb_ctx =
+        std::static_pointer_cast<CryptoMbP256Context>(ops->mb_ctx_);
+    bssl::UniquePtr<EC_POINT> public_key(EC_POINT_new(EC_group_p256()));
+    if (!public_key || !EC_POINT_set_affine_coordinates_GFp(EC_group_p256(), public_key.get(),
+                                                            mb_ctx->public_x_.get(),
+                                                            mb_ctx->public_y_.get(), nullptr)) {
+      return ssl_shared_key_failure;
+    }
+    if (EC_POINT_point2oct(EC_group_p256(), public_key.get(), POINT_CONVERSION_UNCOMPRESSED,
+                           ops->mb_ctx_->ciphertext_.get(), 65, nullptr) != 65) {
+      return ssl_shared_key_failure;
+    }
+  } break;
+  default:
+    break;
   }
 
   *ciphertext = ops->mb_ctx_->ciphertext_.get();
@@ -201,10 +284,66 @@ void CryptoMbX25519Queue::processRequests() {
   request_queue_.clear();
 }
 
+void CryptoMbP256Queue::processRequests() {
+  stats_.p256_queue_sizes_.recordValue(request_queue_.size());
+
+  BIGNUM* pa_public_x[MULTIBUFF_BATCH] = {};
+  BIGNUM* pa_public_y[MULTIBUFF_BATCH] = {};
+  const BIGNUM* pa_private_key[MULTIBUFF_BATCH] = {};
+  uint8_t* pa_shared_key[MULTIBUFF_BATCH] = {};
+  const BIGNUM* pa_peer_x[MULTIBUFF_BATCH] = {};
+  const BIGNUM* pa_peer_y[MULTIBUFF_BATCH] = {};
+  for (unsigned req_num = 0; req_num < request_queue_.size(); req_num++) {
+    CryptoMbP256ContextSharedPtr mb_ctx =
+        std::static_pointer_cast<CryptoMbP256Context>(request_queue_[req_num]);
+    pa_public_x[req_num] = mb_ctx->public_x_.get();
+    pa_public_y[req_num] = mb_ctx->public_y_.get();
+    pa_private_key[req_num] = mb_ctx->private_key_.get();
+  }
+
+  ENVOY_LOG(debug, "Multibuffer P-256 process {} requests", request_queue_.size());
+
+  uint32_t p256_sts = ipp_->mbxNistp256EcpublicKeySslMb8(pa_public_x, pa_public_y, pa_private_key);
+
+  enum RequestStatus status[MULTIBUFF_BATCH] = {RequestStatus::Retry};
+  for (unsigned req_num = 0; req_num < request_queue_.size(); req_num++) {
+    CryptoMbP256ContextSharedPtr mb_ctx =
+        std::static_pointer_cast<CryptoMbP256Context>(request_queue_[req_num]);
+    if (ipp_->mbxGetSts(p256_sts, req_num)) {
+      ENVOY_LOG(debug, "Multibuffer P256 request {} success", req_num);
+      status[req_num] = RequestStatus::Success;
+    } else {
+      ENVOY_LOG(debug, "Multibuffer P256 request {} failure", req_num);
+      status[req_num] = RequestStatus::Error;
+    }
+
+    pa_shared_key[req_num] = mb_ctx->secret_.get();
+    pa_peer_x[req_num] = mb_ctx->peer_x_.get();
+    pa_peer_y[req_num] = mb_ctx->peer_y_.get();
+  }
+
+  p256_sts = ipp_->mbxNistp256EcdhSslMb8(pa_shared_key, pa_private_key, pa_peer_x, pa_peer_y);
+
+  for (unsigned req_num = 0; req_num < request_queue_.size(); req_num++) {
+    CryptoMbP256ContextSharedPtr mb_ctx =
+        std::static_pointer_cast<CryptoMbP256Context>(request_queue_[req_num]);
+    enum RequestStatus ctx_status;
+    if (!ipp_->mbxGetSts(p256_sts, req_num)) {
+      status[req_num] = RequestStatus::Error;
+    }
+
+    ctx_status = status[req_num];
+    mb_ctx->scheduleCallback(ctx_status);
+  }
+
+  request_queue_.clear();
+}
+
 CryptoMbSharedKeyConnection::CryptoMbSharedKeyConnection(Ssl::SharedKeyConnectionCallbacks& cb,
                                                          Event::Dispatcher& dispatcher,
-                                                         CryptoMbX25519Queue& x25519_queue)
-    : x25519_queue_(x25519_queue), dispatcher_(dispatcher), cb_(cb) {}
+                                                         CryptoMbX25519Queue& x25519_queue,
+                                                         CryptoMbP256Queue& p256_queue)
+    : x25519_queue_(x25519_queue), p256_queue_(p256_queue), dispatcher_(dispatcher), cb_(cb) {}
 
 void CryptoMbSharedKeyMethodProvider::registerSharedKeyMethod(SSL* ssl,
                                                               Ssl::SharedKeyConnectionCallbacks& cb,
@@ -217,14 +356,21 @@ void CryptoMbSharedKeyMethodProvider::registerSharedKeyMethod(SSL* ssl,
   ASSERT(tls_->currentThreadRegistered(), "Current thread needs to be registered.");
 
   CryptoMbX25519Queue& x25519_queue = tls_->get()->x25519_queue_;
+  CryptoMbP256Queue& p256_queue = tls_->get()->p256_queue_;
+  CryptoMbSharedKeyConnection* ops =
+      new CryptoMbSharedKeyConnection(cb, dispatcher, x25519_queue, p256_queue);
 
-  CryptoMbSharedKeyConnection* ops = new CryptoMbSharedKeyConnection(cb, dispatcher, x25519_queue);
   SSL_set_ex_data(ssl, CryptoMbSharedKeyMethodProvider::connectionIndex(), ops);
 }
 
 void CryptoMbSharedKeyConnection::x25519AddToQueue(CryptoMbX25519ContextSharedPtr mb_ctx) {
   mb_ctx_ = mb_ctx;
   x25519_queue_.addAndProcessEightRequests(mb_ctx_);
+}
+
+void CryptoMbSharedKeyConnection::p256AddToQueue(CryptoMbP256ContextSharedPtr mb_ctx) {
+  mb_ctx_ = mb_ctx;
+  p256_queue_.addAndProcessEightRequests(mb_ctx_);
 }
 
 bool CryptoMbSharedKeyMethodProvider::checkFips() {

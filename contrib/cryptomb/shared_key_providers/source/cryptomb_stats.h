@@ -8,7 +8,9 @@ namespace Extensions {
 namespace SharedKeyMethodProvider {
 namespace CryptoMb {
 
-#define ALL_CRYPTOMB_STATS(HISTOGRAM) HISTOGRAM(x25519_queue_sizes, Unspecified)
+#define ALL_CRYPTOMB_STATS(HISTOGRAM)                                                              \
+  HISTOGRAM(x25519_queue_sizes, Unspecified)                                                       \
+  HISTOGRAM(p256_queue_sizes, Unspecified)
 
 /**
  * CryptoMb stats struct definition. @see stats_macros.h

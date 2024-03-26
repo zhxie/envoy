@@ -31,6 +31,10 @@ public:
   enum RequestStatus getStatus() { return status_; }
   void scheduleCallback(enum RequestStatus status);
 
+  virtual uint16_t groupId() const PURE;
+
+  virtual bool init(const uint8_t* peer_key) PURE;
+
   // Ciphertext and secret.
   std::unique_ptr<uint8_t[]> ciphertext_;
   std::unique_ptr<uint8_t[]> secret_;
@@ -53,7 +57,9 @@ class CryptoMbX25519Context : public CryptoMbContext {
 public:
   CryptoMbX25519Context(Event::Dispatcher& dispatcher, Ssl::SharedKeyConnectionCallbacks& cb)
       : CryptoMbContext(dispatcher, cb) {}
-  bool x25519Init(const uint8_t* peer_key);
+  bool init(const uint8_t* peer_key) override;
+
+  uint16_t groupId() const override { return SSL_GROUP_X25519; };
 
   bool initialized_{};
   // Peer key.
@@ -62,8 +68,31 @@ public:
   uint8_t private_key_[32];
 };
 
+// CryptoMbP256Context is a CryptoMbContext which holds the extra P-256 parameters and has custom
+// initialization function.
+class CryptoMbP256Context : public CryptoMbContext {
+public:
+  CryptoMbP256Context(Event::Dispatcher& dispatcher, Ssl::SharedKeyConnectionCallbacks& cb)
+      : CryptoMbContext(dispatcher, cb) {}
+  bool init(const uint8_t* peer_key) override;
+
+  uint16_t groupId() const override { return SSL_GROUP_SECP256R1; };
+
+  bool initialized_{};
+  // Peer key.
+  bssl::UniquePtr<EC_POINT> peer_key_;
+  bssl::UniquePtr<BIGNUM> peer_x_;
+  bssl::UniquePtr<BIGNUM> peer_y_;
+  // Private key.
+  bssl::UniquePtr<BIGNUM> private_key_;
+  // Public key.
+  bssl::UniquePtr<BIGNUM> public_x_;
+  bssl::UniquePtr<BIGNUM> public_y_;
+};
+
 using CryptoMbContextSharedPtr = std::shared_ptr<CryptoMbContext>;
 using CryptoMbX25519ContextSharedPtr = std::shared_ptr<CryptoMbX25519Context>;
+using CryptoMbP256ContextSharedPtr = std::shared_ptr<CryptoMbP256Context>;
 
 // CryptoMbQueue maintains the request queue and is able to process it.
 class CryptoMbQueue : public Logger::Loggable<Logger::Id::connection> {
@@ -111,19 +140,32 @@ private:
   void processRequests() override;
 };
 
+class CryptoMbP256Queue : public CryptoMbQueue {
+public:
+  CryptoMbP256Queue(std::chrono::milliseconds poll_delay,
+                    PrivateKeyMethodProvider::CryptoMb::IppCryptoSharedPtr ipp,
+                    Event::Dispatcher& d, CryptoMbStats& stats)
+      : CryptoMbQueue(poll_delay, ipp, d, stats) {}
+
+private:
+  void processRequests() override;
+};
+
 // CryptoMbSharedKeyConnection maintains the data needed by a given SSL
 // connection.
 class CryptoMbSharedKeyConnection : public Logger::Loggable<Logger::Id::connection> {
 public:
   CryptoMbSharedKeyConnection(Ssl::SharedKeyConnectionCallbacks& cb, Event::Dispatcher& dispatcher,
-                              CryptoMbX25519Queue& x25519_queue);
+                              CryptoMbX25519Queue& x25519_queue, CryptoMbP256Queue& p256_queue);
   virtual ~CryptoMbSharedKeyConnection() = default;
 
   void logDebugMsg(std::string msg) { ENVOY_LOG(debug, "CryptoMb: {}", msg); }
   void logWarnMsg(std::string msg) { ENVOY_LOG(warn, "CryptoMb: {}", msg); }
   void x25519AddToQueue(CryptoMbX25519ContextSharedPtr mb_ctx);
+  void p256AddToQueue(CryptoMbP256ContextSharedPtr mb_ctx);
 
   CryptoMbX25519Queue& x25519_queue_;
+  CryptoMbP256Queue& p256_queue_;
   Event::Dispatcher& dispatcher_;
   Ssl::SharedKeyConnectionCallbacks& cb_;
   CryptoMbContextSharedPtr mb_ctx_{};
@@ -157,8 +199,9 @@ private:
     ThreadLocalData(std::chrono::milliseconds poll_delay,
                     PrivateKeyMethodProvider::CryptoMb::IppCryptoSharedPtr ipp,
                     Event::Dispatcher& d, CryptoMbStats& stats)
-        : x25519_queue_(poll_delay, ipp, d, stats){};
+        : x25519_queue_(poll_delay, ipp, d, stats), p256_queue_(poll_delay, ipp, d, stats){};
     CryptoMbX25519Queue x25519_queue_;
+    CryptoMbP256Queue p256_queue_;
   };
 
   Ssl::BoringSslSharedKeyMethodSharedPtr method_{};

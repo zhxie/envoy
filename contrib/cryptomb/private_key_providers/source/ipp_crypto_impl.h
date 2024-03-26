@@ -43,6 +43,17 @@ public:
                         const uint8_t* const pa_public_key[8]) override {
     return ::mbx_x25519_mb8(pa_shared_key, pa_private_key, pa_public_key);
   }
+  uint32_t mbxNistp256EcpublicKeySslMb8(BIGNUM* pa_public_x[8], BIGNUM* pa_public_y[8],
+                                        const BIGNUM* const pa_private_key[8]) override {
+    return ::mbx_nistp256_ecpublic_key_ssl_mb8(pa_public_x, pa_public_y, nullptr, pa_private_key,
+                                               nullptr);
+  }
+  uint32_t mbxNistp256EcdhSslMb8(uint8_t* pa_shared_key[8], const BIGNUM* const pa_private_key[8],
+                                 const BIGNUM* const pa_public_x[8],
+                                 const BIGNUM* const pa_public_y[8]) override {
+    return ::mbx_nistp256_ecdh_ssl_mb8(pa_shared_key, pa_private_key, pa_public_x, pa_public_y,
+                                       nullptr, nullptr);
+  }
   bool mbxGetSts(uint32_t status, unsigned req_num) override {
     if (MBX_GET_STS(status, req_num) == MBX_STATUS_OK) {
       return true;
