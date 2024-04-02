@@ -62,19 +62,13 @@ bool CryptoMbP256Context::init(const uint8_t* peer_key) {
   secret_ = std::make_unique<uint8_t[]>(32);
   secret_len_ = 32;
 
-  peer_key_.reset(EC_POINT_new(EC_group_p256()));
-  if (!peer_key_ || !EC_POINT_oct2point(EC_group_p256(), peer_key_.get(), peer_key, 65, nullptr)) {
-    return false;
-  }
   peer_x_.reset(BN_new());
   peer_y_.reset(BN_new());
   if (!peer_x_ || !peer_y_) {
     return false;
   }
-  if (!EC_POINT_get_affine_coordinates_GFp(EC_group_p256(), peer_key_.get(), peer_x_.get(),
-                                           peer_y_.get(), nullptr)) {
-    return false;
-  }
+  BN_bin2bn(&peer_key[1], 32, peer_x_.get());
+  BN_bin2bn(&peer_key[33], 32, peer_y_.get());
 
   private_key_.reset(BN_new());
   if (!private_key_ ||
@@ -172,14 +166,9 @@ ssl_shared_key_result_t sharedKeyCompleteInternal(CryptoMbSharedKeyConnection* o
   case SSL_GROUP_SECP256R1: {
     CryptoMbP256ContextSharedPtr mb_ctx =
         std::static_pointer_cast<CryptoMbP256Context>(ops->mb_ctx_);
-    bssl::UniquePtr<EC_POINT> public_key(EC_POINT_new(EC_group_p256()));
-    if (!public_key || !EC_POINT_set_affine_coordinates_GFp(EC_group_p256(), public_key.get(),
-                                                            mb_ctx->public_x_.get(),
-                                                            mb_ctx->public_y_.get(), nullptr)) {
-      return ssl_shared_key_failure;
-    }
-    if (EC_POINT_point2oct(EC_group_p256(), public_key.get(), POINT_CONVERSION_UNCOMPRESSED,
-                           ops->mb_ctx_->ciphertext_.get(), 65, nullptr) != 65) {
+    mb_ctx->ciphertext_[0] = 4;
+    if (!BN_bn2bin_padded(&mb_ctx->ciphertext_.get()[1], 32, mb_ctx->public_x_.get()) ||
+        !BN_bn2bin_padded(&mb_ctx->ciphertext_.get()[33], 32, mb_ctx->public_y_.get())) {
       return ssl_shared_key_failure;
     }
   } break;

@@ -80,7 +80,6 @@ public:
 
   bool initialized_{};
   // Peer key.
-  bssl::UniquePtr<EC_POINT> peer_key_;
   bssl::UniquePtr<BIGNUM> peer_x_;
   bssl::UniquePtr<BIGNUM> peer_y_;
   // Private key.
