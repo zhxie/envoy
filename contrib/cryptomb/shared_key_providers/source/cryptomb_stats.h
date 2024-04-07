@@ -12,9 +12,6 @@ namespace CryptoMb {
   HISTOGRAM(x25519_queue_sizes, Unspecified)                                                       \
   HISTOGRAM(p256_queue_sizes, Unspecified)
 
-/**
- * CryptoMb stats struct definition. @see stats_macros.h
- */
 struct CryptoMbStats {
   ALL_CRYPTOMB_STATS(GENERATE_HISTOGRAM_STRUCT)
 };

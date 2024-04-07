@@ -147,16 +147,10 @@ ssl_shared_key_result_t sharedKeyCompleteInternal(CryptoMbSharedKeyConnection* o
     return ssl_shared_key_failure;
   }
 
-  // Check if the MB operation is ready yet. This can happen if someone calls
-  // the top-level SSL function too early. The op status is only set from this
-  // thread.
   if (ops->mb_ctx_->getStatus() == RequestStatus::Retry) {
     return ssl_shared_key_retry;
   }
 
-  // If this point is reached, the MB processing must be complete.
-
-  // See if the operation failed.
   if (ops->mb_ctx_->getStatus() != RequestStatus::Success) {
     ops->logWarnMsg("shared key operation failed.");
     return ssl_shared_key_failure;
@@ -207,17 +201,14 @@ void CryptoMbQueue::startTimer() { timer_->enableHRTimer(us_); }
 void CryptoMbQueue::stopTimer() { timer_->disableTimer(); }
 
 void CryptoMbQueue::addAndProcessEightRequests(CryptoMbContextSharedPtr mb_ctx) {
-  // Add the request to the processing queue.
   ASSERT(request_queue_.size() < MULTIBUFF_BATCH);
   request_queue_.push_back(mb_ctx);
 
   if (request_queue_.size() == MULTIBUFF_BATCH) {
-    // There are eight requests in the queue and we can process them.
     stopTimer();
     ENVOY_LOG(debug, "processing directly 8 requests");
     processRequests();
   } else if (request_queue_.size() == 1) {
-    // First request in the queue, start the queue timer.
     startTimer();
   }
 }
@@ -382,7 +373,6 @@ void CryptoMbSharedKeyMethodProvider::unregisterSharedKeyMethod(SSL* ssl) {
   delete ops;
 }
 
-// The CryptoMbSharedKeyMethodProvider is created on config.
 CryptoMbSharedKeyMethodProvider::CryptoMbSharedKeyMethodProvider(
     ThreadLocal::SlotAllocator& tls, Stats::Scope& stats_scope,
     PrivateKeyMethodProvider::CryptoMb::IppCryptoSharedPtr ipp,
@@ -398,7 +388,6 @@ CryptoMbSharedKeyMethodProvider::CryptoMbSharedKeyMethodProvider(
   method_->compute = sharedKeyCompute;
   method_->complete = sharedKeyComplete;
 
-  // Create a single queue for every worker thread to avoid locking.
   tls_->set([poll_delay, ipp, this](Event::Dispatcher& d) {
     ENVOY_LOG(debug, "Created CryptoMb Queue for thread {}", d.name());
     return std::make_shared<ThreadLocalData>(poll_delay, ipp, d, stats_);

@@ -17,9 +17,6 @@ namespace CryptoMb {
 
 enum class RequestStatus { Retry, Success, Error };
 
-// CryptoMbContext holds the actual data to be computed. It also has a reference
-// to the worker thread dispatcher for communicating that it has has ran the
-// `AVX-512` code and the result is ready to be used.
 class CryptoMbContext {
 public:
   static constexpr ssize_t MAX_SIGNATURE_SIZE = 512;
@@ -42,17 +39,13 @@ public:
   size_t secret_len_;
 
 private:
-  // Whether the decryption / signing is ready.
   enum RequestStatus status_ {};
 
   Event::Dispatcher& dispatcher_;
   Ssl::SharedKeyConnectionCallbacks& cb_;
-  // For scheduling the callback to the next dispatcher cycle.
   Event::SchedulableCallbackPtr schedulable_{};
 };
 
-// CryptoMbX25519Context is a CryptoMbContext which holds the extra X25519 parameters and has
-// custom initialization function.
 class CryptoMbX25519Context : public CryptoMbContext {
 public:
   CryptoMbX25519Context(Event::Dispatcher& dispatcher, Ssl::SharedKeyConnectionCallbacks& cb)
@@ -68,8 +61,6 @@ public:
   uint8_t private_key_[32];
 };
 
-// CryptoMbP256Context is a CryptoMbContext which holds the extra P-256 parameters and has custom
-// initialization function.
 class CryptoMbP256Context : public CryptoMbContext {
 public:
   CryptoMbP256Context(Event::Dispatcher& dispatcher, Ssl::SharedKeyConnectionCallbacks& cb)
@@ -93,7 +84,6 @@ using CryptoMbContextSharedPtr = std::shared_ptr<CryptoMbContext>;
 using CryptoMbX25519ContextSharedPtr = std::shared_ptr<CryptoMbX25519Context>;
 using CryptoMbP256ContextSharedPtr = std::shared_ptr<CryptoMbP256Context>;
 
-// CryptoMbQueue maintains the request queue and is able to process it.
 class CryptoMbQueue : public Logger::Loggable<Logger::Id::connection> {
 public:
   static constexpr uint32_t MULTIBUFF_BATCH = 8;
@@ -110,22 +100,12 @@ protected:
   void startTimer();
   void stopTimer();
 
-  // Polling delay.
   std::chrono::microseconds us_{};
-
-  // Queue for the requests.
-  std::vector<CryptoMbContextSharedPtr> request_queue_;
-
-  // Thread local data slot.
-  ThreadLocal::SlotPtr slot_{};
-
-  // Crypto operations library interface.
   PrivateKeyMethodProvider::CryptoMb::IppCryptoSharedPtr ipp_{};
-
-  // Timer to trigger queue processing if eight requests are not received in time.
   Event::TimerPtr timer_{};
-
   CryptoMbStats& stats_;
+
+  std::vector<CryptoMbContextSharedPtr> request_queue_;
 };
 
 class CryptoMbX25519Queue : public CryptoMbQueue {
@@ -150,8 +130,6 @@ private:
   void processRequests() override;
 };
 
-// CryptoMbSharedKeyConnection maintains the data needed by a given SSL
-// connection.
 class CryptoMbSharedKeyConnection : public Logger::Loggable<Logger::Id::connection> {
 public:
   CryptoMbSharedKeyConnection(Ssl::SharedKeyConnectionCallbacks& cb, Event::Dispatcher& dispatcher,
@@ -160,6 +138,7 @@ public:
 
   void logDebugMsg(std::string msg) { ENVOY_LOG(debug, "CryptoMb: {}", msg); }
   void logWarnMsg(std::string msg) { ENVOY_LOG(warn, "CryptoMb: {}", msg); }
+
   void x25519AddToQueue(CryptoMbX25519ContextSharedPtr mb_ctx);
   void p256AddToQueue(CryptoMbP256ContextSharedPtr mb_ctx);
 
@@ -167,14 +146,13 @@ public:
   CryptoMbP256Queue& p256_queue_;
   Event::Dispatcher& dispatcher_;
   Ssl::SharedKeyConnectionCallbacks& cb_;
+
   CryptoMbContextSharedPtr mb_ctx_{};
 
 private:
   Event::FileEventPtr ssl_async_event_{};
 };
 
-// CryptoMbSharedKeyMethodProvider handles the shared key method operations for
-// an SSL socket.
 class CryptoMbSharedKeyMethodProvider : public virtual Ssl::SharedKeyMethodProvider,
                                         public Logger::Loggable<Logger::Id::connection> {
 public:
@@ -193,22 +171,20 @@ public:
   static int connectionIndex();
 
 private:
-  // Thread local data containing a single queue per worker thread.
   struct ThreadLocalData : public ThreadLocal::ThreadLocalObject {
     ThreadLocalData(std::chrono::milliseconds poll_delay,
                     PrivateKeyMethodProvider::CryptoMb::IppCryptoSharedPtr ipp,
                     Event::Dispatcher& d, CryptoMbStats& stats)
         : x25519_queue_(poll_delay, ipp, d, stats), p256_queue_(poll_delay, ipp, d, stats){};
+
     CryptoMbX25519Queue x25519_queue_;
     CryptoMbP256Queue p256_queue_;
   };
 
-  Ssl::BoringSslSharedKeyMethodSharedPtr method_{};
-
   ThreadLocal::TypedSlotPtr<ThreadLocalData> tls_;
-
   CryptoMbStats stats_;
 
+  Ssl::BoringSslSharedKeyMethodSharedPtr method_{};
   bool initialized_{};
 };
 
