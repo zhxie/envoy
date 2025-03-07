@@ -5,6 +5,16 @@
 namespace Envoy {
 namespace Io {
 
+#define IORING_REQUIRED_OP(op)                                                                     \
+  { op, #op }
+
+static constexpr std::pair<int, absl::string_view> required_io_uring_ops[] = {
+    IORING_REQUIRED_OP(IORING_OP_ACCEPT),       IORING_REQUIRED_OP(IORING_OP_CONNECT),
+    IORING_REQUIRED_OP(IORING_OP_ASYNC_CANCEL), IORING_REQUIRED_OP(IORING_OP_CLOSE),
+    IORING_REQUIRED_OP(IORING_OP_READV),        IORING_REQUIRED_OP(IORING_OP_WRITEV),
+    IORING_REQUIRED_OP(IORING_OP_SHUTDOWN),
+};
+
 bool isIoUringSupported() {
   struct io_uring_params p {};
   struct io_uring ring;
@@ -13,8 +23,26 @@ bool isIoUringSupported() {
   if (is_supported) {
     io_uring_queue_exit(&ring);
   }
+  if (!is_supported) {
+    return false;
+  }
 
-  return is_supported;
+  struct io_uring_probe* probe = io_uring_get_probe();
+  if (probe == nullptr) {
+    ENVOY_LOG_MISC(warn, "the kernel does not support probing io_uring capabilities");
+    return false;
+  }
+
+  for (auto& op : required_io_uring_ops) {
+    if (!io_uring_opcode_supported(probe, op.first)) {
+      ENVOY_LOG_MISC(warn, "the kernel does not support io_uring operation {}", op.second);
+      io_uring_free_probe(probe);
+      return false;
+    }
+  }
+  io_uring_free_probe(probe);
+
+  return true;
 }
 
 IoUringImpl::IoUringImpl(uint32_t io_uring_size, bool use_submission_queue_polling)
